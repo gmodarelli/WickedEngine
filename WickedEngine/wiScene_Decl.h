@@ -10,8 +10,6 @@ namespace wi::scene
 	struct MeshComponent;
 	struct ImpostorComponent;
 	struct ObjectComponent;
-	struct RigidBodyPhysicsComponent;
-	struct SoftBodyPhysicsComponent;
 	struct ArmatureComponent;
 	struct LightComponent;
 	struct CameraComponent;

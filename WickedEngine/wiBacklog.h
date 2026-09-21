@@ -66,9 +66,6 @@ namespace wi::backlog
 	void Lock();
 	void Unlock();
 
-	void BlockLuaExecution();
-	void UnblockLuaExecution();
-
 	void SetLogLevel(LogLevel newLevel);
 
 	LogLevel GetUnseenLogLevelMax();

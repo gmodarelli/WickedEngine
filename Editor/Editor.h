@@ -1,6 +1,5 @@
 #pragma once
 #include "Translator.h"
-#include "wiScene_BindLua.h"
 #include "ComponentsWindow.h"
 #include "ProfilerWindow.h"
 #include "ContentBrowserWindow.h"
@@ -89,7 +88,6 @@ public:
 	PaintToolWindow paintToolWnd;
 
 	wi::primitive::Ray pickRay;
-	wi::physics::PickDragOperation physicsDragOp;
 
 	std::unique_ptr<wi::RenderPath3D> renderPath;
 	wi::RenderPath3D_PathTracing* pathtracer = nullptr; // This is not lifetime managing pointer, it will view renderPath if it's path tracing

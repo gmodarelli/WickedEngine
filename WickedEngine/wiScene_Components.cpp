@@ -1,7 +1,6 @@
 #include "wiScene_Components.h"
 #include "wiTextureHelper.h"
 #include "wiResourceManager.h"
-#include "wiPhysics.h"
 #include "wiRenderer.h"
 #include "wiJobSystem.h"
 #include "wiSpinLock.h"
@@ -9,7 +8,6 @@
 #include "wiBacklog.h"
 #include "wiTimer.h"
 #include "wiUnorderedMap.h"
-#include "wiLua.h"
 
 #include "Utility/meshoptimizer/meshoptimizer.h"
 
@@ -2236,10 +2234,6 @@ namespace wi::scene
 		case wi::scene::AnimationComponent::AnimationChannel::Path::CAMERA_APERTURE_SHAPE:
 			return PathDataType::Float2;
 
-		case wi::scene::AnimationComponent::AnimationChannel::Path::SCRIPT_PLAY:
-		case wi::scene::AnimationComponent::AnimationChannel::Path::SCRIPT_STOP:
-			return PathDataType::Event;
-
 		case wi::scene::AnimationComponent::AnimationChannel::Path::MATERIAL_COLOR:
 		case wi::scene::AnimationComponent::AnimationChannel::Path::MATERIAL_EMISSIVE:
 		case wi::scene::AnimationComponent::AnimationChannel::Path::MATERIAL_TEXMULADD:
@@ -2254,222 +2248,6 @@ namespace wi::scene
 			break;
 		}
 		return PathDataType::Event;
-	}
-
-	void SoftBodyPhysicsComponent::CreateFromMesh(MeshComponent& mesh)
-	{
-		if (weights.size() != mesh.vertex_positions.size())
-		{
-			weights.resize(mesh.vertex_positions.size(), 1.0f);
-		}
-		if (physicsIndices.empty())
-		{
-			bool pinning_required = false;
-			wi::vector<uint32_t> source;
-			uint32_t first_subset = 0;
-			uint32_t last_subset = 0;
-			mesh.GetLODSubsetRange(0, first_subset, last_subset);
-			for (uint32_t subsetIndex = first_subset; subsetIndex < last_subset; ++subsetIndex)
-			{
-				const MeshComponent::MeshSubset& subset = mesh.subsets[subsetIndex];
-				const uint32_t* indices = mesh.indices.data() + subset.indexOffset;
-				for (uint32_t i = 0; i < subset.indexCount; ++i)
-				{
-					source.push_back(indices[i]);
-					pinning_required |= weights[indices[i]] == 0;
-				}
-			}
-			physicsIndices.resize(source.size());
-
-			if (pinning_required)
-			{
-				// If there is pinning, we need to use precise LOD to retain difference between pinned and soft vertices:
-				wi::vector<XMFLOAT4> vertices(mesh.vertex_positions.size());
-				for (size_t i = 0; i < mesh.vertex_positions.size(); ++i)
-				{
-					vertices[i].x = mesh.vertex_positions[i].x;
-					vertices[i].y = mesh.vertex_positions[i].y;
-					vertices[i].z = mesh.vertex_positions[i].z;
-					vertices[i].w = weights[i] == 0 ? 1.0f : 0.0f;
-				}
-
-				// Generate shadow indices for position+weight-only stream:
-				wi::vector<uint32_t> shadow_indices(source.size());
-				meshopt_generateShadowIndexBuffer(
-					shadow_indices.data(), source.data(), source.size(),
-					vertices.data(), vertices.size(), sizeof(XMFLOAT4), sizeof(XMFLOAT4)
-				);
-
-				size_t result = 0;
-				size_t target_index_count = size_t(shadow_indices.size() * saturate(detail)) / 3 * 3;
-				float target_error = 1 - saturate(detail);
-				int tries = 0;
-				while (result == 0 && tries < 100)
-				{
-					result = meshopt_simplify(
-						&physicsIndices[0],
-						&shadow_indices[0],
-						shadow_indices.size(),
-						(const float*)&mesh.vertex_positions[0],
-						mesh.vertex_positions.size(),
-						sizeof(XMFLOAT3),
-						target_index_count,
-						target_error
-					);
-					target_error *= 0.5f;
-				}
-				assert(result > 0);
-				physicsIndices.resize(result);
-			}
-			else
-			{
-				// Sloppy LOD can be used if no pinning is required:
-				size_t result = 0;
-				size_t target_index_count = 0;
-				float target_error = sqr(1 - saturate(detail));
-				int tries = 0;
-				while (result == 0 && tries < 100)
-				{
-					result = meshopt_simplifySloppy(
-						&physicsIndices[0],
-						&source[0],
-						source.size(),
-						(const float*)&mesh.vertex_positions[0],
-						mesh.vertex_positions.size(),
-						sizeof(XMFLOAT3),
-						target_index_count,
-						target_error
-					);
-					target_error *= 0.5f;
-				}
-				assert(result > 0);
-				physicsIndices.resize(result);
-			}
-
-			physicsIndices.shrink_to_fit();
-
-			// Remap physics indices to point to physics indices:
-			physicsToGraphicsVertexMapping.clear();
-			wi::unordered_map<uint32_t, size_t> physicsVertices;
-			for (size_t i = 0; i < physicsIndices.size(); ++i)
-			{
-				const uint32_t graphicsInd = physicsIndices[i];
-				if (physicsVertices.count(graphicsInd) == 0)
-				{
-					physicsVertices[graphicsInd] = physicsToGraphicsVertexMapping.size();
-					physicsToGraphicsVertexMapping.push_back(graphicsInd);
-				}
-				physicsIndices[i] = (uint32_t)physicsVertices[graphicsInd];
-			}
-			physicsToGraphicsVertexMapping.shrink_to_fit();
-
-			// BoneQueue is used for assigning the highest weighted fixed number of bones (soft body nodes) to a graphics vertex
-			static constexpr int influence = 8;
-			struct BoneQueue
-			{
-				struct Bone
-				{
-					uint32_t index = 0;
-					float weight = 0;
-					constexpr bool operator<(const Bone& other) const { return weight < other.weight; }
-					constexpr bool operator>(const Bone& other) const { return weight > other.weight; }
-				};
-				Bone bones[influence];
-				constexpr void add(uint32_t index, float weight)
-				{
-					int mini = 0;
-					for (int i = 1; i < arraysize(bones); ++i)
-					{
-						if (bones[i].weight < bones[mini].weight)
-						{
-							mini = i;
-						}
-					}
-					if (weight > bones[mini].weight)
-					{
-						bones[mini].weight = weight;
-						bones[mini].index = index;
-					}
-				}
-				void finalize()
-				{
-					std::sort(bones, bones + arraysize(bones), std::greater<Bone>());
-					// Note: normalization of bone weights will be done in MeshComponent::CreateRenderData()
-				}
-				constexpr XMUINT4 get_indices() const
-				{
-					return XMUINT4(
-						influence < 1 ? 0 : bones[0].index,
-						influence < 2 ? 0 : bones[1].index,
-						influence < 3 ? 0 : bones[2].index,
-						influence < 4 ? 0 : bones[3].index
-					);
-				}
-				constexpr XMUINT4 get_indices2() const
-				{
-					return XMUINT4(
-						influence < 5 ? 0 : bones[4].index,
-						influence < 6 ? 0 : bones[5].index,
-						influence < 7 ? 0 : bones[6].index,
-						influence < 8 ? 0 : bones[7].index
-					);
-				}
-				constexpr XMFLOAT4 get_weights() const
-				{
-					return XMFLOAT4(
-						influence < 1 ? 0 : bones[0].weight,
-						influence < 2 ? 0 : bones[1].weight,
-						influence < 3 ? 0 : bones[2].weight,
-						influence < 4 ? 0 : bones[3].weight
-					);
-				}
-				constexpr XMFLOAT4 get_weights2() const
-				{
-					return XMFLOAT4(
-						influence < 5 ? 0 : bones[4].weight,
-						influence < 6 ? 0 : bones[5].weight,
-						influence < 7 ? 0 : bones[6].weight,
-						influence < 8 ? 0 : bones[7].weight
-					);
-				}
-			};
-
-			// Create skinning bone vertex data:
-			mesh.vertex_boneindices.resize(mesh.vertex_positions.size());
-			mesh.vertex_boneweights.resize(mesh.vertex_positions.size());
-			if (influence > 4)
-			{
-				mesh.vertex_boneindices2.resize(mesh.vertex_positions.size());
-				mesh.vertex_boneweights2.resize(mesh.vertex_positions.size());
-			}
-			wi::jobsystem::context ctx;
-			wi::jobsystem::Dispatch(ctx, (uint32_t)mesh.vertex_positions.size(), 64, [&](wi::jobsystem::JobArgs args) {
-				const XMFLOAT3 position = mesh.vertex_positions[args.jobIndex];
-
-				BoneQueue bones;
-				for (size_t physicsInd = 0; physicsInd < physicsToGraphicsVertexMapping.size(); ++physicsInd)
-				{
-					const uint32_t graphicsInd = physicsToGraphicsVertexMapping[physicsInd];
-					const XMFLOAT3 position2 = mesh.vertex_positions[graphicsInd];
-					const float dist = wi::math::DistanceSquared(position, position2);
-					// Note: 0.01 correction is carefully tweaked so that cloth_test and sponza curtains look good
-					// (larger values blow up the curtains, lower values make the shading of the cloth look bad)
-					const float weight = 1.0f / (0.01f + dist);
-					bones.add((uint32_t)physicsInd, weight);
-				}
-
-				bones.finalize();
-				mesh.vertex_boneindices[args.jobIndex] = bones.get_indices();
-				mesh.vertex_boneweights[args.jobIndex] = bones.get_weights();
-				if (influence > 4)
-				{
-					mesh.vertex_boneindices2[args.jobIndex] = bones.get_indices2();
-					mesh.vertex_boneweights2[args.jobIndex] = bones.get_weights2();
-				}
-			});
-			wi::jobsystem::Wait(ctx);
-			mesh.CreateRenderData();
-		}
 	}
 
 	void CameraComponent::CreateOrtho(float newWidth, float newHeight, float newNear, float newFar, float newVerticalSize)
@@ -2616,13 +2394,6 @@ namespace wi::scene
 		focal_length = wi::math::Lerp(a.focal_length, b.focal_length, t);
 		aperture_size = wi::math::Lerp(a.aperture_size, b.aperture_size, t);
 		aperture_shape = wi::math::Lerp(a.aperture_shape, b.aperture_shape, t);
-	}
-
-	void ScriptComponent::CreateFromFile(const std::string& filename)
-	{
-		this->filename = filename;
-		resource = wi::resourcemanager::Load(filename);
-		script.clear(); // will be created on first Update()
 	}
 
 	void SoundComponent::Play()

@@ -36,8 +36,6 @@ namespace wi::scene
 		wi::ecs::ComponentManager<MeshComponent>& meshes = componentLibrary.Register<MeshComponent>("wi::scene::Scene::meshes", 4); // version = 4
 		wi::ecs::ComponentManager<ImpostorComponent>& impostors = componentLibrary.Register<ImpostorComponent>("wi::scene::Scene::impostors");
 		wi::ecs::ComponentManager<ObjectComponent>& objects = componentLibrary.Register<ObjectComponent>("wi::scene::Scene::objects", 4); // version = 4
-		wi::ecs::ComponentManager<RigidBodyPhysicsComponent>& rigidbodies = componentLibrary.Register<RigidBodyPhysicsComponent>("wi::scene::Scene::rigidbodies", 6); // version = 6
-		wi::ecs::ComponentManager<SoftBodyPhysicsComponent>& softbodies = componentLibrary.Register<SoftBodyPhysicsComponent>("wi::scene::Scene::softbodies", 3); // version = 3
 		wi::ecs::ComponentManager<ArmatureComponent>& armatures = componentLibrary.Register<ArmatureComponent>("wi::scene::Scene::armatures");
 		wi::ecs::ComponentManager<LightComponent>& lights = componentLibrary.Register<LightComponent>("wi::scene::Scene::lights", 5); // version = 5
 		wi::ecs::ComponentManager<CameraComponent>& cameras = componentLibrary.Register<CameraComponent>("wi::scene::Scene::cameras", 3); // version = 3
@@ -54,7 +52,6 @@ namespace wi::scene
 		wi::ecs::ComponentManager<InverseKinematicsComponent>& inverse_kinematics = componentLibrary.Register<InverseKinematicsComponent>("wi::scene::Scene::inverse_kinematics");
 		wi::ecs::ComponentManager<SpringComponent>& springs = componentLibrary.Register<SpringComponent>("wi::scene::Scene::springs", 1); // version = 1
 		wi::ecs::ComponentManager<ColliderComponent>& colliders = componentLibrary.Register<ColliderComponent>("wi::scene::Scene::colliders", 2); // version = 2
-		wi::ecs::ComponentManager<ScriptComponent>& scripts = componentLibrary.Register<ScriptComponent>("wi::scene::Scene::scripts");
 		wi::ecs::ComponentManager<ExpressionComponent>& expressions = componentLibrary.Register<ExpressionComponent>("wi::scene::Scene::expressions");
 		wi::ecs::ComponentManager<HumanoidComponent>& humanoids = componentLibrary.Register<HumanoidComponent>("wi::scene::Scene::humanoids", 3); // version = 3
 		wi::ecs::ComponentManager<wi::terrain::Terrain>& terrains = componentLibrary.Register<wi::terrain::Terrain>("wi::scene::Scene::terrains", 6); // version = 6
@@ -63,7 +60,6 @@ namespace wi::scene
 		wi::ecs::ComponentManager<wi::VoxelGrid>& voxel_grids = componentLibrary.Register<wi::VoxelGrid>("wi::scene::Scene::voxel_grids");
 		wi::ecs::ComponentManager<MetadataComponent>& metadatas = componentLibrary.Register<MetadataComponent>("wi::scene::Scene::metadatas");
 		wi::ecs::ComponentManager<CharacterComponent>& characters = componentLibrary.Register<CharacterComponent>("wi::scene::Scene::characters");
-		wi::ecs::ComponentManager<PhysicsConstraintComponent>& constraints = componentLibrary.Register<PhysicsConstraintComponent>("wi::scene::Scene::constraints", 6); // version = 6
 		wi::ecs::ComponentManager<SplineComponent>& splines = componentLibrary.Register<SplineComponent>("wi::scene::Scene::splines", 4); // version = 4
 		wi::ecs::ComponentManager<wi::GaussianSplatModel>& gaussian_splats = componentLibrary.Register<wi::GaussianSplatModel>("wi::scene::Scene::gaussian_splats");
 
@@ -507,7 +503,6 @@ namespace wi::scene
 		void RunWeatherUpdateSystem(wi::jobsystem::context& ctx);
 		void RunSoundUpdateSystem(wi::jobsystem::context& ctx);
 		void RunVideoUpdateSystem(wi::jobsystem::context& ctx);
-		void RunScriptUpdateSystem(wi::jobsystem::context& ctx);
 		void RunSpriteUpdateSystem(wi::jobsystem::context& ctx);
 		void RunFontUpdateSystem(wi::jobsystem::context& ctx);
 		void RunCharacterUpdateSystem(wi::jobsystem::context& ctx);
@@ -640,9 +635,6 @@ namespace wi::scene
 	// Returns skinned vertex position in armature local space
 	//	N : normal (out, optional)
 	XMVECTOR SkinVertex(const MeshComponent& mesh, const ArmatureComponent& armature, uint32_t index, XMVECTOR* N = nullptr);
-	// Returns skinned vertex position of soft body in world space
-	//	N : normal (out, optional)
-	XMVECTOR SkinVertex(const MeshComponent& mesh, const SoftBodyPhysicsComponent& softbody, uint32_t index, XMVECTOR* N = nullptr);
 
 
 	// Helper that manages a global scene

@@ -4,7 +4,6 @@
 #include "wiRenderer.h"
 #include "wiHelper.h"
 #include "wiScene.h"
-#include "wiPhysics.h"
 #include "wiImage.h"
 #include "wiFont.h"
 #include "wiTextureHelper.h"
@@ -685,8 +684,6 @@ namespace wi::terrain
 			weather = *weather_component; // feedback default weather
 		}
 
-		bool props_regenerated = false;
-
 		// Invalidated chunks replacements, originals are removed before merging updated ones:
 		for (Chunk chunk : generator->removable_chunks)
 		{
@@ -705,7 +702,6 @@ namespace wi::terrain
 		generator->removable_chunks.clear();
 
 		// What was generated, will be merged in to the main scene
-		props_regenerated |= generator->scene.rigidbodies.GetCount() >= 1000;
 		scene->MergeFastInternal(generator->scene);
 
 		chunk_scale_rcp = 1.0f / chunk_scale;
@@ -839,7 +835,6 @@ namespace wi::terrain
 					{
 						scene->Entity_Remove(chunk_data.props_entity);
 						chunk_data.props_entity = INVALID_ENTITY; // prop can be generated here by generation thread...
-						props_regenerated = true;
 					}
 				}
 			}
@@ -873,45 +868,7 @@ namespace wi::terrain
 				}
 			}
 
-			RigidBodyPhysicsComponent* rigidbody = scene->rigidbodies.GetComponent(chunk_data.entity);
-			if (IsPhysicsEnabled())
-			{
-				const ObjectComponent* object = scene->objects.GetComponent(chunk_data.entity);
-
-				if (dist < physics_generation)
-				{
-					if (rigidbody == nullptr)
-					{
-						RigidBodyPhysicsComponent& newrigidbody = scene->rigidbodies.Create(chunk_data.entity);
-						newrigidbody.shape = RigidBodyPhysicsComponent::HEIGHTFIELD;
-						newrigidbody.mass = 0; // terrain chunks are static
-						newrigidbody.friction = 0.8f;
-						//newrigidbody.mesh_lod = 2;
-					}
-					else
-					{
-						rigidbody->shape = RigidBodyPhysicsComponent::HEIGHTFIELD;
-					}
-				}
-				else if(rigidbody != nullptr)
-				{
-					scene->rigidbodies.Remove(chunk_data.entity);
-				}
-			}
-			else
-			{
-				if (rigidbody != nullptr)
-				{
-					scene->rigidbodies.Remove(chunk_data.entity);
-				}
-			}
-
 			it++;
-		}
-
-		if (props_regenerated)
-		{
-			wi::physics::OptimizeBroadPhase(*scene);
 		}
 
 		if (virtual_texture_any)
@@ -1254,30 +1211,6 @@ namespace wi::terrain
 							chunk_data.grass.meshID = chunk_data.entity;
 							chunk_data.grass.strandCount = uint32_t(grass_valid_vertex_count.load() * 3 * chunk_scale * chunk_scale); // chunk_scale * chunk_scale : grass density increases with squared amount with chunk scale (x*z)
 							chunk_data.grass.CreateFromMesh(mesh);
-						});
-					}
-
-					if (IsPhysicsEnabled())
-					{
-						// Precompute the physics shape on the job pool, because
-						// computing shape for triangle mesh would be slow on
-						// main thread: Note that this is
-						// mesh.precomputed_rigidbody_physics_shape and not a
-						// component in scene.rigidbodies, so this only
-						// contains the shape, not the simulated rigid bodies.
-						// It only reads the mesh and writes its own shape, so
-						// it runs concurrently with the render data and grass
-						// tasks.
-						wi::jobsystem::Execute(
-							ctx,
-							[&](wi::jobsystem::JobArgs args)
-						{
-							RigidBodyPhysicsComponent& newrigidbody = mesh.precomputed_rigidbody_physics_shape;
-							newrigidbody.shape = RigidBodyPhysicsComponent::HEIGHTFIELD;
-							newrigidbody.mass = 0; // terrain chunks are static
-							newrigidbody.friction = 0.8f;
-							//newrigidbody.mesh_lod = 2;
-							wi::physics::CreateRigidBodyShape(newrigidbody, transform.scale_local, &mesh);
 						});
 					}
 

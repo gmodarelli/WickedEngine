@@ -5374,15 +5374,7 @@ void UpdateRenderData(
 				}
 				else
 				{
-					const SoftBodyPhysicsComponent* softbody = vis.scene->softbodies.GetComponent(entity);
-					if (softbody != nullptr)
-					{
-						push.bone_offset = softbody->gpuBoneOffset;
-					}
-					else
-					{
-						push.bone_offset = ~0u;
-					}
+					push.bone_offset = ~0u;
 				}
 				push.vb_bon = mesh.vb_bon.descriptor_srv;
 				if (mesh.active_morph_count > 0)

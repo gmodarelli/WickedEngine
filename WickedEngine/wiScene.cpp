@@ -1,7 +1,6 @@
 #include "wiScene.h"
 #include "wiTextureHelper.h"
 #include "wiResourceManager.h"
-#include "wiPhysics.h"
 #include "wiRenderer.h"
 #include "wiJobSystem.h"
 #include "wiSpinLock.h"
@@ -9,7 +8,6 @@
 #include "wiBacklog.h"
 #include "wiTimer.h"
 #include "wiUnorderedMap.h"
-#include "wiLua.h"
 #include "wiAllocator.h"
 #include "wiProfiler.h"
 
@@ -41,10 +39,6 @@ namespace wi::scene
 		wi::jobsystem::context ctx;
 
 		UpdateHumanoidFacings();
-
-		// Script system runs first, because it could create new entities and components
-		//	So GPU persistent resources need to be created accordingly for them too:
-		RunScriptUpdateSystem(ctx);
 
 		RunSplineUpdateSystem(ctx);
 
@@ -244,8 +238,6 @@ namespace wi::scene
 
 		RunAnimationUpdateSystem(ctx);
 
-		wi::physics::RunPhysicsUpdateSystem(ctx, *this, dt);
-
 		RunTransformUpdateSystem(ctx);
 
 		wi::jobsystem::Wait(ctx); // dependencies
@@ -372,8 +364,6 @@ namespace wi::scene
 		WaitBuildTopDownHierarchy();
 
 		RunProceduralAnimationUpdateSystem(ctx);
-
-		wi::physics::OverrideWehicleWheelTransforms(*this);
 
 		RunArmatureUpdateSystem(ctx);
 
@@ -2088,7 +2078,6 @@ namespace wi::scene
 					SoundComponent* target_sound = nullptr;
 					EmittedParticleSystem* target_emitter = nullptr;
 					CameraComponent* target_camera = nullptr;
-					ScriptComponent* target_script = nullptr;
 					MaterialComponent* target_material = nullptr;
 
 					if (
@@ -2220,15 +2209,6 @@ namespace wi::scene
 						}
 					}
 					else if (
-						channel.path >= AnimationComponent::AnimationChannel::Path::SCRIPT_PLAY &&
-						channel.path < AnimationComponent::AnimationChannel::Path::_SCRIPT_RANGE_END
-						)
-					{
-						target_script = scripts.GetComponent(channel.target);
-						if (target_script == nullptr)
-							continue;
-					}
-					else if (
 						channel.path >= AnimationComponent::AnimationChannel::Path::MATERIAL_COLOR &&
 						channel.path < AnimationComponent::AnimationChannel::Path::_MATERIAL_RANGE_END
 						)
@@ -2279,12 +2259,6 @@ namespace wi::scene
 								break;
 							case AnimationComponent::AnimationChannel::Path::SOUND_STOP:
 								target_sound->Stop();
-								break;
-							case AnimationComponent::AnimationChannel::Path::SCRIPT_PLAY:
-								target_script->Play();
-								break;
-							case AnimationComponent::AnimationChannel::Path::SCRIPT_STOP:
-								target_script->Stop();
 								break;
 							default:
 								break;
@@ -3967,16 +3941,6 @@ namespace wi::scene
 
 			armature.aabb = AABB(_min, _max);
 		});
-		wi::jobsystem::Dispatch(ctx, (uint32_t)softbodies.GetCount(), 1, [&](wi::jobsystem::JobArgs args) {
-			SoftBodyPhysicsComponent& softbody = softbodies[args.jobIndex];
-			const uint32_t dataSize = uint32_t(softbody.boneData.size() * sizeof(ShaderTransform));
-			softbody.gpuBoneOffset = skinningAllocator.fetch_add(dataSize);
-			ShaderTransform* gpu_dst = (ShaderTransform*)((uint8_t*)skinningDataMapped + softbody.gpuBoneOffset);
-			if (((size_t)gpu_dst - (size_t)skinningDataMapped + (size_t)dataSize) <= skinningDataSize)
-			{
-				std::memcpy(gpu_dst, softbody.boneData.data(), dataSize);
-			}
-		});
 	}
 	void Scene::RunMeshUpdateSystem(wi::jobsystem::context& ctx)
 	{
@@ -4509,28 +4473,6 @@ namespace wi::scene
 				if (impostor != nullptr)
 				{
 					object.fadeDistance = std::min(object.fadeDistance, impostor->swapInDistance);
-				}
-
-				SoftBodyPhysicsComponent* softbody = softbodies.GetComponent(object.meshID);
-				if (softbody != nullptr)
-				{
-					if (wi::physics::IsEnabled())
-					{
-						// this will be registered as soft body in the next physics update
-						softbody->_flags |= SoftBodyPhysicsComponent::SAFE_TO_REGISTER;
-
-						// soft body manipulated with the object matrix
-						softbody->worldMatrix = transform.world;
-					}
-
-					if (softbody->physicsobject != nullptr)
-					{
-						// simulation aabb will be used for soft bodies
-						aabb = softbody->aabb;
-
-						// soft bodies have no transform, their vertices are simulated in world space
-						W = XMMatrixIdentity();
-					}
 				}
 
 				object.center = aabb.getCenter();
@@ -5550,39 +5492,6 @@ namespace wi::scene
 			wi::video::UpdateVideo(&video.videoinstance, dt);
 		}
 	}
-	void Scene::RunScriptUpdateSystem(wi::jobsystem::context& ctx)
-	{
-		if (dt == 0)
-			return; // not allowed to be run when dt == 0 as it could be on separate thread!
-		auto range = wi::profiler::BeginRangeCPU("Script Components");
-		for (size_t i = 0; i < scripts.GetCount(); ++i)
-		{
-			ScriptComponent& script = scripts[i];
-			Entity entity = scripts.GetEntity(i);
-
-			if (script.IsPlaying())
-			{
-				if (script.resource.IsValid() && (script.script.empty() || script.script_hash != script.resource.GetScriptHash()))
-				{
-					script.script.clear();
-					script.script_hash = script.resource.GetScriptHash();
-					std::string str = script.resource.GetScript();
-					wi::lua::AttachScriptParameters(str, script.filename, wi::lua::GeneratePID(), "local function GetEntity() return " + std::to_string(entity) + "; end;", "");
-					wi::lua::CompileText(str, script.script);
-				}
-				if (!script.script.empty())
-				{
-					wi::lua::RunBinaryData(script.script.data(), script.script.size(), script.filename.c_str());
-				}
-
-				if (script.IsPlayingOnlyOnce())
-				{
-					script.Stop();
-				}
-			}
-		}
-		wi::profiler::EndRange(range);
-	}
 	void Scene::RunSpriteUpdateSystem(wi::jobsystem::context& ctx)
 	{
 		wi::jobsystem::Dispatch(ctx, (uint32_t)sprites.GetCount(), small_subtask_groupsize, [&](wi::jobsystem::JobArgs args) {
@@ -6390,11 +6299,6 @@ namespace wi::scene
 					{
 						object->SetRenderable(true);
 					}
-					RigidBodyPhysicsComponent* rigidbody = rigidbodies.GetComponent(entity);
-					if (rigidbody != nullptr)
-					{
-						rigidbody->physicsobject = {}; // recreate
-					}
 				}
 				else
 				{
@@ -6508,7 +6412,6 @@ namespace wi::scene
 					continue;
 
 				const Entity entity = objects.GetEntity(objectIndex);
-				const SoftBodyPhysicsComponent* softbody = softbodies.GetComponent(object.meshID);
 				const XMMATRIX objectMat = XMLoadFloat4x4(&matrix_objects[objectIndex]);
 				const XMMATRIX objectMatPrev = XMLoadFloat4x4(&matrix_objects_prev[objectIndex]);
 				const XMMATRIX objectMat_Inverse = XMMatrixInverse(nullptr, objectMat);
@@ -6525,13 +6428,7 @@ namespace wi::scene
 					XMVECTOR p0;
 					XMVECTOR p1;
 					XMVECTOR p2;
-					if (softbody != nullptr && !softbody->boneData.empty())
-					{
-						p0 = SkinVertex(*mesh, *softbody, i0);
-						p1 = SkinVertex(*mesh, *softbody, i1);
-						p2 = SkinVertex(*mesh, *softbody, i2);
-					}
-					else if (armature != nullptr && !armature->boneData.empty())
+					if (armature != nullptr && !armature->boneData.empty())
 					{
 						p0 = SkinVertex(*mesh, *armature, i0);
 						p1 = SkinVertex(*mesh, *armature, i1);
@@ -6555,21 +6452,13 @@ namespace wi::scene
 						// Note: we do the TMin, Tmax check here, in world space! We use the RayTriangleIntersects in local space, so we don't use those in there
 						if (distance < result.distance && distance >= ray.TMin && distance <= ray.TMax)
 						{
-							XMVECTOR nor;
-							if (softbody != nullptr || mesh->vertex_normals.empty()) // Note: for soft body we compute it instead of loading the simulated normals
-							{
-								nor = XMVector3Cross(p2 - p1, p1 - p0);
-							}
-							else
-							{
-								nor = XMVectorBaryCentric(
-									XMLoadFloat3(&mesh->vertex_normals[i0]),
-									XMLoadFloat3(&mesh->vertex_normals[i1]),
-									XMLoadFloat3(&mesh->vertex_normals[i2]),
-									bary.x,
-									bary.y
-								);
-							}
+							XMVECTOR nor = XMVectorBaryCentric(
+								XMLoadFloat3(&mesh->vertex_normals[i0]),
+								XMLoadFloat3(&mesh->vertex_normals[i1]),
+								XMLoadFloat3(&mesh->vertex_normals[i2]),
+								bary.x,
+								bary.y
+							);
 							nor = XMVector3Normalize(XMVector3TransformNormal(nor, objectMat));
 							const XMVECTOR vel = pos - XMVector3Transform(pos_local, objectMatPrev);
 
@@ -6769,7 +6658,6 @@ namespace wi::scene
 					continue;
 
 				const Entity entity = objects.GetEntity(objectIndex);
-				const SoftBodyPhysicsComponent* softbody = softbodies.GetComponent(object.meshID);
 				const XMMATRIX objectMat = XMLoadFloat4x4(&matrix_objects[objectIndex]);
 				const XMMATRIX objectMatPrev = XMLoadFloat4x4(&matrix_objects_prev[objectIndex]);
 				const XMMATRIX objectMat_Inverse = XMMatrixInverse(nullptr, objectMat);
@@ -6785,14 +6673,7 @@ namespace wi::scene
 
 					XMVECTOR p0;
 					XMVECTOR p1;
-					XMVECTOR p2;
-					if (softbody != nullptr && !softbody->boneData.empty())
-					{
-						p0 = SkinVertex(*mesh, *softbody, i0);
-						p1 = SkinVertex(*mesh, *softbody, i1);
-						p2 = SkinVertex(*mesh, *softbody, i2);
-					}
-					else if (armature != nullptr && !armature->boneData.empty())
+					XMVECTOR p2;if (armature != nullptr && !armature->boneData.empty())
 					{
 						p0 = SkinVertex(*mesh, *armature, i0);
 						p1 = SkinVertex(*mesh, *armature, i1);
@@ -6816,21 +6697,13 @@ namespace wi::scene
 						// Note: we do the TMin, Tmax check here, in world space! We use the RayTriangleIntersects in local space, so we don't use those in there
 						if (distance >= ray.TMin && distance <= ray.TMax)
 						{
-							XMVECTOR nor;
-							if (softbody != nullptr || mesh->vertex_normals.empty()) // Note: for soft body we compute it instead of loading the simulated normals
-							{
-								nor = XMVector3Cross(p2 - p1, p1 - p0);
-							}
-							else
-							{
-								nor = XMVectorBaryCentric(
-									XMLoadFloat3(&mesh->vertex_normals[i0]),
-									XMLoadFloat3(&mesh->vertex_normals[i1]),
-									XMLoadFloat3(&mesh->vertex_normals[i2]),
-									bary.x,
-									bary.y
-								);
-							}
+							XMVECTOR nor = XMVectorBaryCentric(
+								XMLoadFloat3(&mesh->vertex_normals[i0]),
+								XMLoadFloat3(&mesh->vertex_normals[i1]),
+								XMLoadFloat3(&mesh->vertex_normals[i2]),
+								bary.x,
+								bary.y
+							);
 							nor = XMVector3Normalize(XMVector3TransformNormal(nor, objectMat));
 							const XMVECTOR vel = pos - XMVector3Transform(pos_local, objectMatPrev);
 
@@ -7024,7 +6897,6 @@ namespace wi::scene
 					continue;
 
 				const Entity entity = objects.GetEntity(objectIndex);
-				const SoftBodyPhysicsComponent* softbody = softbodies.GetComponent(object.meshID);
 				const XMMATRIX objectMat = XMLoadFloat4x4(&matrix_objects[objectIndex]);
 				const XMMATRIX objectMatPrev = XMLoadFloat4x4(&matrix_objects_prev[objectIndex]);
 				const XMMATRIX objectMat_Inverse = XMMatrixInverse(nullptr, objectMat);
@@ -7041,13 +6913,7 @@ namespace wi::scene
 					XMVECTOR p0;
 					XMVECTOR p1;
 					XMVECTOR p2;
-					if (softbody != nullptr && !softbody->boneData.empty())
-					{
-						p0 = SkinVertex(*mesh, *softbody, i0);
-						p1 = SkinVertex(*mesh, *softbody, i1);
-						p2 = SkinVertex(*mesh, *softbody, i2);
-					}
-					else if (armature != nullptr && !armature->boneData.empty())
+					if (armature != nullptr && !armature->boneData.empty())
 					{
 						p0 = SkinVertex(*mesh, *armature, i0);
 						p1 = SkinVertex(*mesh, *armature, i1);
@@ -7225,7 +7091,6 @@ namespace wi::scene
 					continue;
 
 				const Entity entity = objects.GetEntity(objectIndex);
-				const SoftBodyPhysicsComponent* softbody = softbodies.GetComponent(object.meshID);
 				const XMMATRIX objectMat = XMLoadFloat4x4(&matrix_objects[objectIndex]);
 				const XMMATRIX objectMatPrev = XMLoadFloat4x4(&matrix_objects_prev[objectIndex]);
 				const XMMATRIX objectMatInverse = XMMatrixInverse(nullptr, objectMat);
@@ -7240,13 +7105,7 @@ namespace wi::scene
 					XMVECTOR p0;
 					XMVECTOR p1;
 					XMVECTOR p2;
-					if (softbody != nullptr && !softbody->boneData.empty())
-					{
-						p0 = SkinVertex(*mesh, *softbody, i0);
-						p1 = SkinVertex(*mesh, *softbody, i1);
-						p2 = SkinVertex(*mesh, *softbody, i2);
-					}
-					else if (armature != nullptr && !armature->boneData.empty())
+					if (armature != nullptr && !armature->boneData.empty())
 					{
 						p0 = SkinVertex(*mesh, *armature, i0);
 						p1 = SkinVertex(*mesh, *armature, i1);
@@ -7532,7 +7391,6 @@ namespace wi::scene
 					continue;
 
 				const Entity entity = objects.GetEntity(objectIndex);
-				const SoftBodyPhysicsComponent* softbody = softbodies.GetComponent(object.meshID);
 				const XMMATRIX objectMat = XMLoadFloat4x4(&matrix_objects[objectIndex]);
 				const XMMATRIX objectMatPrev = XMLoadFloat4x4(&matrix_objects_prev[objectIndex]);
 				const XMMATRIX objectMatInverse = XMMatrixInverse(nullptr, objectMat);
@@ -7547,13 +7405,7 @@ namespace wi::scene
 					XMVECTOR p0;
 					XMVECTOR p1;
 					XMVECTOR p2;
-					if (softbody != nullptr && !softbody->boneData.empty())
-					{
-						p0 = SkinVertex(*mesh, *softbody, i0);
-						p1 = SkinVertex(*mesh, *softbody, i1);
-						p2 = SkinVertex(*mesh, *softbody, i2);
-					}
-					else if (armature != nullptr && !armature->boneData.empty())
+					if (armature != nullptr && !armature->boneData.empty())
 					{
 						p0 = SkinVertex(*mesh, *armature, i0);
 						p1 = SkinVertex(*mesh, *armature, i1);
@@ -7851,7 +7703,6 @@ namespace wi::scene
 					continue;
 
 				const Entity entity = objects.GetEntity(objectIndex);
-				const SoftBodyPhysicsComponent* softbody = softbodies.GetComponent(object.meshID);
 				const XMMATRIX objectMat = XMLoadFloat4x4(&matrix_objects[objectIndex]);
 				const XMMATRIX objectMatPrev = XMLoadFloat4x4(&matrix_objects_prev[objectIndex]);
 				const ArmatureComponent* armature = mesh->IsSkinned() ? armatures.GetComponent(mesh->armatureID) : nullptr;
@@ -7866,13 +7717,7 @@ namespace wi::scene
 					XMVECTOR p0;
 					XMVECTOR p1;
 					XMVECTOR p2;
-					if (softbody != nullptr && !softbody->boneData.empty())
-					{
-						p0 = SkinVertex(*mesh, *softbody, i0);
-						p1 = SkinVertex(*mesh, *softbody, i1);
-						p2 = SkinVertex(*mesh, *softbody, i2);
-					}
-					else if (armature != nullptr && !armature->boneData.empty())
+					if (armature != nullptr && !armature->boneData.empty())
 					{
 						p0 = SkinVertex(*mesh, *armature, i0);
 						p1 = SkinVertex(*mesh, *armature, i1);
@@ -8280,7 +8125,6 @@ namespace wi::scene
 					continue;
 
 				const Entity entity = objects.GetEntity(objectIndex);
-				const SoftBodyPhysicsComponent* softbody = softbodies.GetComponent(object.meshID);
 				const XMMATRIX objectMat = XMLoadFloat4x4(&matrix_objects[objectIndex]);
 				const XMMATRIX objectMatPrev = XMLoadFloat4x4(&matrix_objects_prev[objectIndex]);
 				const ArmatureComponent* armature = mesh->IsSkinned() ? armatures.GetComponent(mesh->armatureID) : nullptr;
@@ -8295,13 +8139,7 @@ namespace wi::scene
 					XMVECTOR p0;
 					XMVECTOR p1;
 					XMVECTOR p2;
-					if (softbody != nullptr && !softbody->boneData.empty())
-					{
-						p0 = SkinVertex(*mesh, *softbody, i0);
-						p1 = SkinVertex(*mesh, *softbody, i1);
-						p2 = SkinVertex(*mesh, *softbody, i2);
-					}
-					else if (armature != nullptr && !armature->boneData.empty())
+					if (armature != nullptr && !armature->boneData.empty())
 					{
 						p0 = SkinVertex(*mesh, *armature, i0);
 						p1 = SkinVertex(*mesh, *armature, i1);
@@ -8644,7 +8482,6 @@ namespace wi::scene
 		const MeshComponent* mesh = meshes.GetComponent(object.meshID);
 		if (mesh == nullptr)
 			return;
-		const SoftBodyPhysicsComponent* softbody = softbodies.GetComponent(object.meshID);
 		const XMMATRIX objectMat = XMLoadFloat4x4(&matrix_objects[objectIndex]);
 		const ArmatureComponent* armature = mesh->IsSkinned() ? armatures.GetComponent(mesh->armatureID) : nullptr;
 
@@ -8668,13 +8505,7 @@ namespace wi::scene
 				XMVECTOR p0;
 				XMVECTOR p1;
 				XMVECTOR p2;
-				if (softbody != nullptr && !softbody->boneData.empty())
-				{
-					p0 = SkinVertex(*mesh, *softbody, i0);
-					p1 = SkinVertex(*mesh, *softbody, i1);
-					p2 = SkinVertex(*mesh, *softbody, i2);
-				}
-				else if (armature != nullptr && !armature->boneData.empty())
+				if (armature != nullptr && !armature->boneData.empty())
 				{
 					p0 = SkinVertex(*mesh, *armature, i0);
 					p1 = SkinVertex(*mesh, *armature, i1);
@@ -8772,21 +8603,13 @@ namespace wi::scene
 		if (mesh == nullptr)
 			return XMFLOAT3(0, 0, 0);
 
-		const SoftBodyPhysicsComponent* softbody = softbodies.GetComponent(object->meshID);
 		const ArmatureComponent* armature = mesh->IsSkinned() ? armatures.GetComponent(mesh->armatureID) : nullptr;
 
 		XMVECTOR P;
 		XMVECTOR p0;
 		XMVECTOR p1;
 		XMVECTOR p2;
-		if (softbody != nullptr && !softbody->boneData.empty())
-		{
-			p0 = SkinVertex(*mesh, *softbody, vertexID0);
-			p1 = SkinVertex(*mesh, *softbody, vertexID1);
-			p2 = SkinVertex(*mesh, *softbody, vertexID2);
-			P = XMVectorBaryCentric(p0, p1, p2, bary.x, bary.y);
-		}
-		else if (armature != nullptr && !armature->boneData.empty())
+		if (armature != nullptr && !armature->boneData.empty())
 		{
 			p0 = SkinVertex(*mesh, *armature, vertexID0);
 			p1 = SkinVertex(*mesh, *armature, vertexID1);
@@ -9013,10 +8836,6 @@ namespace wi::scene
 	XMVECTOR SkinVertex(const MeshComponent& mesh, const ArmatureComponent& armature, uint32_t index, XMVECTOR* N)
 	{
 		return SkinVertex(mesh, armature.boneData, index, N);
-	}
-	XMVECTOR SkinVertex(const MeshComponent& mesh, const SoftBodyPhysicsComponent& softbody, uint32_t index, XMVECTOR* N)
-	{
-		return SkinVertex(mesh, softbody.boneData, index, N);
 	}
 
 
