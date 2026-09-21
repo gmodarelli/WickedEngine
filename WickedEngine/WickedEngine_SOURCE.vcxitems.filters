@@ -16,9 +16,6 @@
     <Filter Include="ENGINE\Helpers">
       <UniqueIdentifier>{4342ecc7-471b-4218-9acb-2b5b8e2e10f2}</UniqueIdentifier>
     </Filter>
-    <Filter Include="ENGINE\Network">
-      <UniqueIdentifier>{c5d86df2-c519-488e-a98a-ba1eab3d19c3}</UniqueIdentifier>
-    </Filter>
     <Filter Include="ENGINE\Audio">
       <UniqueIdentifier>{76f7fa22-7992-4b49-b4d2-cc24be672869}</UniqueIdentifier>
     </Filter>
@@ -182,9 +179,6 @@
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)wiAudio.h">
       <Filter>ENGINE\Audio</Filter>
-    </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)wiNetwork.h">
-      <Filter>ENGINE\Network</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)Utility\vk_mem_alloc.h">
       <Filter>UTILITY</Filter>
@@ -452,9 +446,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)wiAudio.cpp">
       <Filter>ENGINE\Audio</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)wiNetwork_Windows.cpp">
-      <Filter>ENGINE\Network</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)wiInput.cpp">
       <Filter>ENGINE\Input</Filter>
     </ClCompile>
@@ -469,9 +460,6 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)wiSpriteFont.cpp">
       <Filter>ENGINE\Graphics</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)wiNetwork_Linux.cpp">
-      <Filter>ENGINE\Network</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)wiEventHandler.cpp">
       <Filter>ENGINE\System</Filter>

@@ -94,7 +94,6 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)wiImage.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)wiInitializer.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)wiJobSystem.h" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)wiNetwork.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)wiMath.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)wiOcean.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)wiPlatform.h" />
@@ -179,7 +178,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)wiEmittedParticle.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)wiFadeManager.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)wiFont.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)wiNetwork_Linux.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)wiSDLInput.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)wiShaderCompiler.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)wiGUI.cpp" />
@@ -190,7 +188,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)wiInput.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)wiPrimitive.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)wiJobSystem.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)wiNetwork_Windows.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)wiMath.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)wiOcean.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)wiProfiler.cpp" />
