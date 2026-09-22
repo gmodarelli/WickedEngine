@@ -1,6 +1,5 @@
 #include "stdafx.h"
 #include "wiRenderer.h"
-#include "wiScene_BindLua.h"
 
 #include "ModelImporter.h"
 #include "Translator.h"
@@ -21,7 +20,6 @@ using namespace wi::ecs;
 enum class FileType
 {
 	INVALID,
-	LUA,
 	WISCENE,
 	OBJ,
 	GLTF,
@@ -38,7 +36,6 @@ enum class FileType
 	CPP,
 };
 static wi::unordered_map<std::string, FileType> filetypes = {
-	{"LUA", FileType::LUA},
 	{"WISCENE", FileType::WISCENE},
 	{"OBJ", FileType::OBJ},
 	{"GLTF", FileType::GLTF},
@@ -358,8 +355,6 @@ void Editor::Initialize()
 		renderComponent.setMSAASampleCount(msaa);
 		renderComponent.Load();
 		ActivatePath(&renderComponent, 0.5f, wi::Color::Black(), wi::FadeManager::FadeType::CrossFade);
-
-		wi::lua::EnableEditorFunctionality(this, &renderComponent);
 
 		auto ext_video = wi::resourcemanager::GetSupportedVideoExtensions();
 		for (auto& x : ext_video)
@@ -697,14 +692,12 @@ void EditorComponent::Load()
 		NEW_PLANE,
 		NEW_SPHERE,
 		NEW_ANIMATION,
-		NEW_SCRIPT,
 		NEW_COLLIDER,
 		NEW_TERRAIN,
 		NEW_SPRITE,
 		NEW_FONT,
 		NEW_VOXELGRID,
 		NEW_METADATA,
-		NEW_CONSTRAINT,
 		NEW_SPLINE,
 	};
 
@@ -734,14 +727,12 @@ void EditorComponent::Load()
 	newEntityCombo.AddItem("Plane " ICON_SQUARE, NEW_PLANE);
 	newEntityCombo.AddItem("Sphere " ICON_CIRCLE, NEW_SPHERE);
 	newEntityCombo.AddItem("Animation " ICON_ANIMATION, NEW_ANIMATION);
-	newEntityCombo.AddItem("Script " ICON_SCRIPT, NEW_SCRIPT);
 	newEntityCombo.AddItem("Collider " ICON_COLLIDER, NEW_COLLIDER);
 	newEntityCombo.AddItem("Terrain " ICON_TERRAIN, NEW_TERRAIN);
 	newEntityCombo.AddItem("Sprite " ICON_SPRITE, NEW_SPRITE);
 	newEntityCombo.AddItem("Font " ICON_FONT, NEW_FONT);
 	newEntityCombo.AddItem("Voxel Grid " ICON_VOXELGRID, NEW_VOXELGRID);
 	newEntityCombo.AddItem("Metadata " ICON_METADATA, NEW_METADATA);
-	newEntityCombo.AddItem("Constraint " ICON_CONSTRAINT, NEW_CONSTRAINT);
 	newEntityCombo.AddItem("Spline " ICON_SPLINE, NEW_SPLINE);
 	newEntityCombo.OnSelect([this](wi::gui::EventArgs args) {
 		newEntityCombo.SetSelectedWithoutCallback(-1);
@@ -889,11 +880,6 @@ void EditorComponent::Load()
 			scene.animations.Create(pick.entity);
 			scene.names.Create(pick.entity) = "animation";
 			break;
-		case NEW_SCRIPT:
-			pick.entity = CreateEntity();
-			scene.scripts.Create(pick.entity);
-			scene.names.Create(pick.entity) = "script";
-			break;
 		case NEW_COLLIDER:
 			pick.entity = CreateEntity();
 			scene.colliders.Create(pick.entity);
@@ -943,14 +929,6 @@ void EditorComponent::Load()
 			scene.metadatas.Create(pick.entity);
 			scene.transforms.Create(pick.entity);
 			scene.names.Create(pick.entity) = "metadata";
-		}
-		break;
-		case NEW_CONSTRAINT:
-		{
-			pick.entity = CreateEntity();
-			scene.constraints.Create(pick.entity);
-			scene.transforms.Create(pick.entity);
-			scene.names.Create(pick.entity) = "constraint";
 		}
 		break;
 		case NEW_SPLINE:
@@ -1048,26 +1026,6 @@ void EditorComponent::Load()
 	});
 	GetGUI().AddWidget(&localGlobalButton);
 
-	physicsButton.Create(ICON_RIGIDBODY);
-	physicsButton.SetShadowRadius(2);
-	physicsButton.SetTooltip("Toggle Physics Simulation On/Off\n\tOr: press while holding left Ctrl to reset physics bodies");
-	if (main->config.GetSection("options").Has("physics"))
-	{
-		wi::physics::SetSimulationEnabled(main->config.GetSection("options").GetBool("physics"));
-	}
-	physicsButton.OnClick([this](wi::gui::EventArgs args) {
-		if (wi::input::Down(wi::input::KEYBOARD_BUTTON_LCONTROL))
-		{
-			wi::physics::ResetPhysicsObjects(GetCurrentScene());
-		}
-		else
-		{
-			wi::physics::SetSimulationEnabled(!wi::physics::IsSimulationEnabled());
-			main->config.GetSection("options").Set("physics", wi::physics::IsSimulationEnabled());
-		}
-	});
-	GetGUI().AddWidget(&physicsButton);
-
 	dummyButton.Create(ICON_DUMMY);
 	dummyButton.SetShadowRadius(2);
 	dummyButton.SetTooltip("Toggle reference dummy visualizer\n - Use the reference dummy to get an idea about object sizes compared to a human character size.\n - Position the dummy by clicking on something with the middle mouse button while the dummy is active.\n - Pressing this button while Ctrl key is held down will reset dummy position to the origin.\n - Pressing this button while the Shift key is held down will switch between male and female dummies.");
@@ -1096,46 +1054,6 @@ void EditorComponent::Load()
 		navtest_enabled = !navtest_enabled;
 	});
 	GetGUI().AddWidget(&navtestButton);
-
-	playButton.Create(ICON_PLAY);
-	playButton.font.params.shadowColor = wi::Color::Transparent();
-	playButton.SetShadowRadius(2);
-	playButton.SetLocalizationEnabled(wi::gui::LocalizationEnabled::Tooltip);
-	playButton.SetTooltip("Execute the last used (standalone) script.\nTo use a new script, use the Open button.");
-	playButton.OnClick([this](wi::gui::EventArgs args) {
-		if (last_script_path.empty() || !wi::helper::FileExists(last_script_path))
-		{
-			contentBrowserWnd.RefreshContent();
-			contentBrowserWnd.SetVisible(true);
-			contentBrowserWnd.SetEnabled(true);
-		}
-		else
-		{
-			wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT, [=](uint64_t userdata) {
-				wi::lua::RunFile(last_script_path);
-			});
-		}
-	});
-	topmenuWnd.AddWidget(&playButton);
-
-	if (main->config.Has("last_script_path"))
-	{
-		last_script_path = main->config.GetText("last_script_path");
-	}
-	playButton.SetScriptTip("dofile(\"" + last_script_path + "\")");
-
-
-	stopButton.Create(ICON_STOP);
-	stopButton.SetLocalizationEnabled(wi::gui::LocalizationEnabled::Tooltip);
-	stopButton.font.params.shadowColor = wi::Color::Transparent();
-	stopButton.SetShadowRadius(2);
-	stopButton.SetTooltip("Stops every script background processes that are still running.");
-	stopButton.SetScriptTip("killProcesses()");
-	stopButton.OnClick([](wi::gui::EventArgs args) {
-		wi::lua::KillProcesses();
-	});
-	topmenuWnd.AddWidget(&stopButton);
-
 
 	projectCreatorButton.Create(ICON_PROJECT_CREATE);
 	projectCreatorButton.SetLocalizationEnabled(wi::gui::LocalizationEnabled::Tooltip);
@@ -1793,141 +1711,6 @@ void EditorComponent::Update(float dt)
 		translator.Update(camera, currentMouse, *renderPath);
 	}
 
-	// Vehicle driving controls:
-	if (!wi::backlog::isActive())
-	{
-		if (scene.rigidbodies.GetCount() == 0)
-		{
-			componentsWnd.rigidWnd.driveCheckbox.SetCheck(false);
-		}
-		if (componentsWnd.rigidWnd.driveCheckbox.GetCheck())
-		{
-			RigidBodyPhysicsComponent* rigidbody = scene.rigidbodies.GetComponent(componentsWnd.rigidWnd.driving_entity);
-			if (rigidbody != nullptr && rigidbody->IsVehicle())
-			{
-				//wi::physics::SetDebugDrawEnabled(true);
-				float forward = 0;
-				float brake = 0;
-				float handbrake = 0;
-
-				float velocityAmount = wi::physics::GetVehicleForwardVelocity(*rigidbody);
-
-				if (std::abs(wi::input::GetAnalog(wi::input::GAMEPAD_ANALOG_TRIGGER_R).x) > 0.1f)
-				{
-					if (velocityAmount >= 0)
-					{
-						forward = wi::input::GetAnalog(wi::input::GAMEPAD_ANALOG_TRIGGER_R).x;
-					}
-					else
-					{
-						brake = wi::input::GetAnalog(wi::input::GAMEPAD_ANALOG_TRIGGER_R).x;
-					}
-				}
-				if (wi::input::GetAnalog(wi::input::GAMEPAD_ANALOG_TRIGGER_L).x > 0.1f)
-				{
-					if (velocityAmount > 0.001f)
-					{
-						brake = wi::input::GetAnalog(wi::input::GAMEPAD_ANALOG_TRIGGER_L).x;
-					}
-					else
-					{
-						forward = -wi::input::GetAnalog(wi::input::GAMEPAD_ANALOG_TRIGGER_L).x;
-					}
-				}
-				if (std::abs(wi::input::GetAnalog(wi::input::GAMEPAD_ANALOG_THUMBSTICK_L).x) > 0.1f)
-				{
-					drive_steering_smoothed = lerp(drive_steering_smoothed, wi::input::GetAnalog(wi::input::GAMEPAD_ANALOG_THUMBSTICK_L).x, dt * 2);
-				}
-				if (wi::input::Down(wi::input::GAMEPAD_BUTTON_PLAYSTATION_SQUARE))
-				{
-					handbrake = 1;
-				}
-				drive_orbit_horizontal += wi::input::GetAnalog(wi::input::GAMEPAD_ANALOG_THUMBSTICK_R).x * XM_PI * dt;
-
-				if (CheckInput(EditorActions::MOVE_CAMERA_FORWARD))
-				{
-					if (velocityAmount >= 0)
-					{
-						forward = 1;
-					}
-					else
-					{
-						brake = 1;
-					}
-				}
-				else if (CheckInput(EditorActions::MOVE_CAMERA_BACKWARD))
-				{
-					if (velocityAmount > 0.001f)
-					{
-						brake = 1;
-					}
-					else
-					{
-						forward = -1;
-					}
-				}
-				if (CheckInput(EditorActions::MOVE_CAMERA_LEFT))
-				{
-					drive_steering_smoothed -= dt * 2;
-				}
-				else if (CheckInput(EditorActions::MOVE_CAMERA_RIGHT))
-				{
-					drive_steering_smoothed += dt * 2;
-				}
-				else if (std::abs(wi::input::GetAnalog(wi::input::GAMEPAD_ANALOG_THUMBSTICK_L).x) > 0.1f)
-				{
-					// nothing
-				}
-				else
-				{
-					drive_steering_smoothed = lerp(drive_steering_smoothed, 0.0f, 4 * dt);
-				}
-				if (wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT))
-				{
-					brake = 1;
-				}
-				if (wi::input::Down(wi::input::KEYBOARD_BUTTON_SPACE))
-				{
-					handbrake = 1;
-				}
-				if (wi::input::Down(wi::input::KEYBOARD_BUTTON_LEFT))
-				{
-					drive_orbit_horizontal += XM_PI * dt;
-				}
-				if (wi::input::Down(wi::input::KEYBOARD_BUTTON_RIGHT))
-				{
-					drive_orbit_horizontal -= XM_PI * dt;
-				}
-
-				if (!GetGUI().HasFocus())
-				{
-					drive_cam_dist_next -= wi::input::GetPointer().z;
-				}
-				drive_cam_dist = lerp(drive_cam_dist, drive_cam_dist_next, dt * 2);
-
-				drive_steering_smoothed = clamp(drive_steering_smoothed, -1.0f, 1.0f);
-
-				if (rigidbody->IsMotorcycle())
-				{
-					// break presses front and rear breaks:
-					handbrake = std::max(handbrake, brake);
-				}
-
-				wi::physics::DriveVehicle(*rigidbody, forward, drive_steering_smoothed, brake, handbrake);
-				drive_mode = true;
-			}
-			else
-			{
-				drive_mode = false;
-			}
-		}
-		else
-		{
-			drive_mode = false;
-		}
-		drive_orbit_horizontal = lerp(drive_orbit_horizontal, 0.0f, dt);
-	}
-
 	if (!GetGUI().IsTyping() && !translator.selected.empty() && CheckInput(EditorActions::RENAME_SELECTED))
 	{
 		for (auto& x : translator.selected)
@@ -1978,7 +1761,7 @@ void EditorComponent::Update(float dt)
 	}
 
 	// Camera control:
-	if (!drive_mode && !wi::backlog::isActive() && !GetGUI().HasFocus())
+	if (!wi::backlog::isActive() && !GetGUI().HasFocus())
 	{
 		deleting = CheckInput(EditorActions::DELETE_ACTION);
 		currentMouse = wi::input::GetPointer();
@@ -2345,25 +2128,6 @@ void EditorComponent::Update(float dt)
 					}
 				}
 			}
-			if (has_flag(componentsWnd.filter, ComponentsWindow::Filter::Constraint))
-			{
-				for (size_t i = 0; i < scene.constraints.GetCount(); ++i)
-				{
-					Entity entity = scene.constraints.GetEntity(i);
-					if (!scene.transforms.Contains(entity))
-						continue;
-					const TransformComponent& transform = *scene.transforms.GetComponent(entity);
-
-					XMVECTOR disV = XMVector3LinePointDistance(XMLoadFloat3(&pickRay.origin), XMLoadFloat3(&pickRay.origin) + XMLoadFloat3(&pickRay.direction), transform.GetPositionV());
-					float dis = XMVectorGetX(disV);
-					if (dist_check(dis, transform.GetPosition()))
-					{
-						hovered = wi::scene::PickResult();
-						hovered.entity = entity;
-						hovered.distance = dis;
-					}
-				}
-			}
 			if (has_flag(componentsWnd.filter, ComponentsWindow::Filter::Spline))
 			{
 				for (size_t i = 0; i < scene.splines.GetCount(); ++i)
@@ -2658,33 +2422,6 @@ void EditorComponent::Update(float dt)
 			{
 				if (wi::input::Press(wi::input::MOUSE_BUTTON_MIDDLE))
 				{
-					// Physics impulse tester:
-					wi::physics::RayIntersectionResult result = wi::physics::Intersects(scene, pickRay);
-					if (result.IsValid())
-					{
-						XMFLOAT3 impulse;
-						XMStoreFloat3(&impulse, XMVector3Normalize(XMLoadFloat3(&pickRay.direction)) * 20);
-						if (result.humanoid_ragdoll_entity != INVALID_ENTITY)
-						{
-							// Ragdoll:
-							HumanoidComponent* humanoid = scene.humanoids.GetComponent(result.humanoid_ragdoll_entity);
-							if (humanoid != nullptr)
-							{
-								humanoid->SetRagdollPhysicsEnabled(true);
-								wi::physics::ApplyImpulseAt(*humanoid, result.humanoid_bone, impulse, result.position_local);
-							}
-						}
-						else
-						{
-							// Rigidbody:
-							RigidBodyPhysicsComponent* rigidbody = scene.rigidbodies.GetComponent(result.entity);
-							if (rigidbody != nullptr)
-							{
-								wi::physics::ApplyImpulseAt(*rigidbody, impulse, result.position_local);
-							}
-						}
-						interact_pick_allowed = false;
-					}
 				}
 			}
 			else
@@ -2692,12 +2429,9 @@ void EditorComponent::Update(float dt)
 				// Physics pick dragger:
 				if (wi::input::Down(wi::input::MOUSE_BUTTON_MIDDLE))
 				{
-					wi::physics::PickDrag(scene, pickRay, physicsDragOp);
-					interact_pick_allowed = !physicsDragOp.IsValid();
 				}
 				else
 				{
-					physicsDragOp = {};
 				}
 			}
 
@@ -3139,9 +2873,6 @@ void EditorComponent::Update(float dt)
 		componentsWnd.nameWnd.SetEntity(INVALID_ENTITY);
 		componentsWnd.weatherWnd.SetEntity(INVALID_ENTITY);
 		componentsWnd.animWnd.SetEntity(INVALID_ENTITY);
-		componentsWnd.scriptWnd.SetEntity(INVALID_ENTITY);
-		componentsWnd.rigidWnd.SetEntity(INVALID_ENTITY);
-		componentsWnd.softWnd.SetEntity(INVALID_ENTITY);
 		componentsWnd.colliderWnd.SetEntity(INVALID_ENTITY);
 		componentsWnd.hierarchyWnd.SetEntity(INVALID_ENTITY);
 		componentsWnd.cameraComponentWnd.SetEntity(INVALID_ENTITY);
@@ -3153,7 +2884,6 @@ void EditorComponent::Update(float dt)
 		componentsWnd.fontWnd.SetEntity(INVALID_ENTITY);
 		componentsWnd.voxelGridWnd.SetEntity(INVALID_ENTITY);
 		componentsWnd.metadataWnd.SetEntity(INVALID_ENTITY);
-		componentsWnd.constraintWnd.SetEntity(INVALID_ENTITY);
 		componentsWnd.gaussiansplatWnd.SetEntity(INVALID_ENTITY);
 	}
 	else
@@ -3177,8 +2907,6 @@ void EditorComponent::Update(float dt)
 		componentsWnd.nameWnd.SetEntity(picked.entity);
 		componentsWnd.weatherWnd.SetEntity(picked.entity);
 		componentsWnd.animWnd.SetEntity(picked.entity);
-		componentsWnd.scriptWnd.SetEntity(picked.entity);
-		componentsWnd.rigidWnd.SetEntity(picked.entity);
 		componentsWnd.colliderWnd.SetEntity(picked.entity);
 		componentsWnd.hierarchyWnd.SetEntity(picked.entity);
 		componentsWnd.cameraComponentWnd.SetEntity(picked.entity);
@@ -3190,12 +2918,10 @@ void EditorComponent::Update(float dt)
 		componentsWnd.fontWnd.SetEntity(picked.entity);
 		componentsWnd.voxelGridWnd.SetEntity(picked.entity);
 		componentsWnd.metadataWnd.SetEntity(picked.entity);
-		componentsWnd.constraintWnd.SetEntity(picked.entity);
 		componentsWnd.gaussiansplatWnd.SetEntity(picked.entity);
 
 		bool found_object = false;
 		bool found_mesh = false;
-		bool found_soft = false;
 		bool found_material = false;
 		bool found_spline = false;
 
@@ -3205,10 +2931,8 @@ void EditorComponent::Update(float dt)
 			found_object = true;
 			componentsWnd.objectWnd.SetEntity(picked.entity);
 			componentsWnd.meshWnd.SetEntity(object->meshID, picked.subsetIndex);
-			componentsWnd.softWnd.SetEntity(object->meshID);
 
 			found_mesh = scene.meshes.Contains(object->meshID);
-			found_soft = scene.softbodies.Contains(object->meshID);
 
 			const MeshComponent* mesh = scene.meshes.GetComponent(object->meshID);
 			if (mesh != nullptr && (int)mesh->subsets.size() > picked.subsetIndex)
@@ -3229,11 +2953,6 @@ void EditorComponent::Update(float dt)
 			{
 				componentsWnd.meshWnd.SetEntity(x.entity, 0);
 				found_mesh = true;
-			}
-			if (!found_soft && scene.softbodies.Contains(x.entity))
-			{
-				componentsWnd.softWnd.SetEntity(x.entity);
-				found_soft = true;
 			}
 			if (!found_material && scene.materials.Contains(x.entity))
 			{
@@ -3271,10 +2990,6 @@ void EditorComponent::Update(float dt)
 		if (!found_mesh)
 		{
 			componentsWnd.meshWnd.SetEntity(INVALID_ENTITY, -1);
-		}
-		if (!found_soft)
-		{
-			componentsWnd.softWnd.SetEntity(INVALID_ENTITY);
 		}
 		if (!found_material)
 		{
@@ -3352,11 +3067,8 @@ void EditorComponent::Update(float dt)
 		}
 	}
 
-	if (!drive_mode)
-	{
-		camera.TransformCamera(editorscene.camera_transform);
-		camera.UpdateCamera();
-	}
+	camera.TransformCamera(editorscene.camera_transform);
+	camera.UpdateCamera();
 
 	if (pathtracer != nullptr)
 	{
@@ -3545,32 +3257,6 @@ void EditorComponent::PostUpdate()
 		if (scene.voxel_grids.Contains(componentsWnd.voxelGridWnd.entity))
 		{
 			wi::renderer::DrawVoxelGrid(scene.voxel_grids.GetComponent(componentsWnd.voxelGridWnd.entity));
-		}
-	}
-
-	// Drive mode camera override is done in PostUpdate so that most recent physics updates are available:
-	if (drive_mode)
-	{
-		RigidBodyPhysicsComponent* rigidbody = scene.rigidbodies.GetComponent(componentsWnd.rigidWnd.driving_entity);
-		if (rigidbody != nullptr && rigidbody->IsVehicle())
-		{
-			TransformComponent* vehicle_transform = scene.transforms.GetComponent(componentsWnd.rigidWnd.driving_entity);
-			if (vehicle_transform != nullptr)
-			{
-				XMVECTOR P = vehicle_transform->GetPositionV();
-				XMVECTOR Q = vehicle_transform->GetRotationV();
-				XMMATRIX W = XMMatrixIdentity();
-				if (rigidbody->vehicle.type == RigidBodyPhysicsComponent::Vehicle::Type::Car)
-				{
-					W = XMMatrixTranslation(0, 0.5f, -drive_cam_dist) * XMMatrixRotationX(XM_PI * 0.08f) * XMMatrixRotationY(drive_orbit_horizontal) * XMMatrixRotationQuaternion(Q) * XMMatrixTranslationFromVector(P);
-				}
-				else if (rigidbody->vehicle.type == RigidBodyPhysicsComponent::Vehicle::Type::Motorcycle)
-				{
-					W = XMMatrixTranslation(0, 1.5f, -drive_cam_dist) * XMMatrixRotationX(XM_PI * 0.1f) * XMMatrixRotationY(drive_orbit_horizontal) * XMMatrixRotationQuaternion(Q) * XMMatrixTranslationFromVector(P);
-				}
-				camera.TransformCamera(W);
-				camera.UpdateCamera();
-			}
 		}
 	}
 
@@ -4199,38 +3885,6 @@ void EditorComponent::Render() const
 						device->Draw(vertexCount, 0, cmd);
 						device->EventEnd(cmd);
 					}
-				}
-			}
-
-			if (has_flag(componentsWnd.filter, ComponentsWindow::Filter::Constraint))
-			{
-				for (size_t i = 0; i < scene.constraints.GetCount(); ++i)
-				{
-					Entity entity = scene.constraints.GetEntity(i);
-					if (!scene.transforms.Contains(entity))
-						continue;
-					const TransformComponent& transform = *scene.transforms.GetComponent(entity);
-
-					fp.position = transform.GetPosition();
-					fp.scaling = scaling * camera_scaling(transform.GetPosition());
-					fp.color = inactiveEntityColor;
-
-					if (hovered.entity == entity)
-					{
-						fp.color = hoveredEntityColor;
-					}
-					for (auto& picked : translator.selected)
-					{
-						if (picked.entity == entity)
-						{
-							fp.color = selectedEntityColor;
-							break;
-						}
-					}
-
-
-					wi::font::Draw(ICON_CONSTRAINT, fp, cmd);
-
 				}
 			}
 
@@ -4865,20 +4519,6 @@ void EditorComponent::Render() const
 				wi::image::Draw(nullptr, fx, cmd);
 			}
 #endif
-
-			if (drive_mode)
-			{
-				wi::font::Params params;
-				params.color = save_text_color;
-				params.shadowColor = wi::Color::Black();
-				params.shadowColor.setA(params.color.getA());
-				params.position = XMFLOAT3(PhysicalToLogical(viewport3D.width * 0.5f), 20, 0);
-				params.h_align = wi::font::WIFALIGN_CENTER;
-				params.v_align = wi::font::WIFALIGN_TOP;
-				params.size = 30;
-				params.shadow_softness = 1;
-				wi::font::Draw("Drive Mode", params, cmd);
-			}
 
 			device->RenderPassEnd(cmd);
 		}
@@ -5579,17 +5219,6 @@ void EditorComponent::Open(std::string filename)
 	if (type == FileType::INVALID)
 		return;
 
-	if (type == FileType::LUA)
-	{
-		last_script_path = filename;
-		main->config.Set("last_script_path", last_script_path);
-		main->config.Commit();
-		playButton.SetScriptTip("dofile(\"" + last_script_path + "\")");
-		wi::lua::RunFile(filename);
-		componentsWnd.RefreshEntityTree();
-		RegisterRecentlyUsed(filename);
-		return;
-	}
 	if (type == FileType::VIDEO)
 	{
 		GetCurrentScene().Entity_CreateVideo(wi::helper::GetFileNameFromPath(filename), filename);
@@ -6432,11 +6061,7 @@ void EditorComponent::UpdateDynamicWidgets()
 	float static_pos = screenW - wid_idle * 12;
 
 	projectCreatorButton.SetSize(XMFLOAT2(wid_idle * 0.75f, hei));
-	projectCreatorButton.SetPos(XMFLOAT2(static_pos - stopButton.GetSize().x - 20, y));
-	stopButton.SetSize(XMFLOAT2(wid_idle * 0.75f, hei));
-	stopButton.SetPos(XMFLOAT2(projectCreatorButton.GetPos().x - playButton.GetSize().x - padding, y));
-	playButton.SetSize(XMFLOAT2(wid_idle * 0.75f, hei));
-	playButton.SetPos(XMFLOAT2(stopButton.GetPos().x - playButton.GetSize().x - padding, y));
+	projectCreatorButton.SetPos(XMFLOAT2(static_pos - 20, y));
 
 	float ofs = 0;
 	wid_idle = 105;
@@ -6489,11 +6114,6 @@ void EditorComponent::UpdateDynamicWidgets()
 	localGlobalButton.Update(*this, 0);
 	y += localGlobalButton.GetSize().y + padding;
 
-	physicsButton.SetSize(XMFLOAT2(hei, hei));
-	physicsButton.SetPos(XMFLOAT2(ofs, y));
-	physicsButton.Update(*this, 0);
-	y += physicsButton.GetSize().y + padding;
-
 	dummyButton.SetSize(XMFLOAT2(hei, hei));
 	dummyButton.SetPos(XMFLOAT2(ofs, y));
 	dummyButton.Update(*this, 0);
@@ -6518,8 +6138,8 @@ void EditorComponent::UpdateDynamicWidgets()
 	newEntityCombo.SetText(""); // override localization
 
 
-	XMFLOAT4 color_on = playButton.sprites[wi::gui::FOCUS].params.color;
-	XMFLOAT4 color_off = playButton.sprites[wi::gui::IDLE].params.color;
+	XMFLOAT4 color_on = XMFLOAT4(1, 1, 1, 1);
+	XMFLOAT4 color_off = XMFLOAT4(0.3, 0.3, 0.3, 1);
 
 	if (translator.isTranslator)
 	{
@@ -6557,17 +6177,6 @@ void EditorComponent::UpdateDynamicWidgets()
 	{
 		navtestButton.sprites[wi::gui::IDLE].params.color = color_off;
 	}
-
-	if (wi::physics::IsSimulationEnabled())
-	{
-		physicsButton.sprites[wi::gui::IDLE].params.color = color_on;
-	}
-	else
-	{
-		physicsButton.sprites[wi::gui::IDLE].params.color = color_off;
-	}
-
-
 
 	if (wi::backlog::GetUnseenLogLevelMax() >= wi::backlog::LogLevel::Error)
 	{
@@ -6704,8 +6313,6 @@ void EditorComponent::SetCurrentScene(int index)
 	current_scene = index;
 	this->renderPath->scene = &scenes[current_scene].get()->scene;
 	this->renderPath->camera = &scenes[current_scene].get()->camera;
-	wi::lua::scene::SetGlobalScene(renderPath->scene);
-	wi::lua::scene::SetGlobalCamera(renderPath->camera);
 	componentsWnd.RefreshEntityTree();
 	RefreshSceneList();
 
@@ -6758,8 +6365,6 @@ void EditorComponent::RefreshSceneList()
 				return;
 			}
 
-			wi::lua::KillProcesses();
-
 			translator.selected.clear();
 			wi::scene::Scene& scene = scenes[i]->scene;
 			wi::renderer::ClearWorld(scene);
@@ -6781,9 +6386,6 @@ void EditorComponent::RefreshSceneList()
 			componentsWnd.layerWnd.SetEntity(wi::ecs::INVALID_ENTITY);
 			componentsWnd.nameWnd.SetEntity(wi::ecs::INVALID_ENTITY);
 			componentsWnd.animWnd.SetEntity(wi::ecs::INVALID_ENTITY);
-			componentsWnd.scriptWnd.SetEntity(wi::ecs::INVALID_ENTITY);
-			componentsWnd.rigidWnd.SetEntity(wi::ecs::INVALID_ENTITY);
-			componentsWnd.softWnd.SetEntity(wi::ecs::INVALID_ENTITY);
 			componentsWnd.colliderWnd.SetEntity(wi::ecs::INVALID_ENTITY);
 			componentsWnd.hierarchyWnd.SetEntity(wi::ecs::INVALID_ENTITY);
 			componentsWnd.cameraComponentWnd.SetEntity(wi::ecs::INVALID_ENTITY);
@@ -6795,7 +6397,6 @@ void EditorComponent::RefreshSceneList()
 			componentsWnd.fontWnd.SetEntity(wi::ecs::INVALID_ENTITY);
 			componentsWnd.voxelGridWnd.SetEntity(wi::ecs::INVALID_ENTITY);
 			componentsWnd.metadataWnd.SetEntity(wi::ecs::INVALID_ENTITY);
-			componentsWnd.constraintWnd.SetEntity(wi::ecs::INVALID_ENTITY);
 			componentsWnd.splineWnd.SetEntity(wi::ecs::INVALID_ENTITY);
 			componentsWnd.gaussiansplatWnd.SetEntity(wi::ecs::INVALID_ENTITY);
 

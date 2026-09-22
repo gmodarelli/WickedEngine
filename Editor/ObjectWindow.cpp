@@ -64,7 +64,6 @@ struct Atlas_Dim
 static Atlas_Dim GenerateMeshAtlas(Scene& scene, Entity entity, uint32_t resolution)
 {
 	MeshComponent& meshcomponent = *scene.meshes.GetComponent(entity);
-	SoftBodyPhysicsComponent* softbody = scene.softbodies.GetComponent(entity);
 
 	Atlas_Dim dim;
 
@@ -128,7 +127,6 @@ static Atlas_Dim GenerateMeshAtlas(Scene& scene, Entity entity, uint32_t resolut
 		wi::vector<XMFLOAT4> boneweights;
 		wi::vector<XMUINT4> boneindices2;
 		wi::vector<XMFLOAT4> boneweights2;
-		wi::vector<float> softbodyweights;
 		if (!meshcomponent.vertex_normals.empty())
 		{
 			normals.resize(mesh.vertexCount);
@@ -168,10 +166,6 @@ static Atlas_Dim GenerateMeshAtlas(Scene& scene, Entity entity, uint32_t resolut
 		if (!meshcomponent.vertex_boneweights2.empty())
 		{
 			boneweights2.resize(mesh.vertexCount);
-		}
-		if (softbody != nullptr && !softbody->weights.empty())
-		{
-			softbodyweights.resize(mesh.vertexCount);
 		}
 
 		for (uint32_t j = 0; j < mesh.indexCount; ++j)
@@ -222,10 +216,6 @@ static Atlas_Dim GenerateMeshAtlas(Scene& scene, Entity entity, uint32_t resolut
 			{
 				boneweights2[ind] = meshcomponent.vertex_boneweights2[v.xref];
 			}
-			if (softbody != nullptr && !softbodyweights.empty())
-			{
-				softbodyweights[ind] = softbody->weights[v.xref];
-			}
 		}
 
 		meshcomponent.vertex_positions = positions;
@@ -270,20 +260,7 @@ static Atlas_Dim GenerateMeshAtlas(Scene& scene, Entity entity, uint32_t resolut
 		{
 			meshcomponent.vertex_boneweights2 = boneweights2;
 		}
-		if (softbody != nullptr && !softbodyweights.empty())
-		{
-			softbody->weights = softbodyweights;
-		}
 		meshcomponent.CreateRenderData();
-
-		if (softbody != nullptr)
-		{
-			// Recreate softbody
-			softbody->physicsobject = {};
-			softbody->physicsIndices.clear();
-			softbody->physicsToGraphicsVertexMapping.clear();
-			softbody->CreateFromMesh(meshcomponent);
-		}
 
 	}
 

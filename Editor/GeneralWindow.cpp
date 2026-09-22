@@ -49,31 +49,6 @@ void GeneralWindow::Create(EditorComponent* _editor)
 	masterVolumeSlider.SetValue(wi::audio::GetVolume());
 	AddWidget(&masterVolumeSlider);
 
-	physicsDebugCheckBox.Create("Physics visualizer: ");
-	physicsDebugCheckBox.SetTooltip("Visualize the physics world");
-	physicsDebugCheckBox.OnClick([=](wi::gui::EventArgs args) {
-		wi::physics::SetDebugDrawEnabled(args.bValue);
-		editor->componentsWnd.rigidWnd.physicsDebugCheckBox.SetCheck(args.bValue);
-		editor->componentsWnd.constraintWnd.physicsDebugCheckBox.SetCheck(args.bValue);
-	});
-	physicsDebugCheckBox.SetCheck(wi::physics::IsDebugDrawEnabled());
-	AddWidget(&physicsDebugCheckBox);
-
-	physicsDebugMaxDistanceSlider.Create(0.0f, 2000.0f, 500.0f, 100, "Physics draw distance: ");
-	physicsDebugMaxDistanceSlider.SetTooltip("Maximum distance to draw physics debug shapes");
-	physicsDebugMaxDistanceSlider.SetSize(XMFLOAT2(100, 18));
-	if (editor->main->config.GetSection("options").Has("physics_max_draw_distance"))
-	{
-		wi::physics::SetDebugDrawMaxDistance(editor->main->config.GetSection("options").GetFloat("physics_max_draw_distance"));
-		physicsDebugMaxDistanceSlider.SetValue(wi::physics::GetDebugDrawMaxDistance());
-	}
-	physicsDebugMaxDistanceSlider.OnSlide([=](wi::gui::EventArgs args) {
-		wi::physics::SetDebugDrawMaxDistance(args.fValue);
-		editor->main->config.GetSection("options").Set("physics_max_draw_distance", args.fValue);
-		editor->main->config.Commit();
-	});
-	AddWidget(&physicsDebugMaxDistanceSlider);
-
 	nameDebugCheckBox.Create("Name visualizer: ");
 	nameDebugCheckBox.SetTooltip("Visualize the entity names in the scene");
 	AddWidget(&nameDebugCheckBox);
@@ -940,16 +915,6 @@ void GeneralWindow::Create(EditorComponent* _editor)
 			}
 
 			if (gui_round_enabled) {
-				editor->physicsButton.sprites[i].params.enableCornerRounding();
-				editor->physicsButton.sprites[i].params.corners_rounding[0].radius = gui_round_radius_default;
-				editor->physicsButton.sprites[i].params.corners_rounding[1].radius = gui_round_radius_default;
-				editor->physicsButton.sprites[i].params.corners_rounding[2].radius = gui_round_radius_default;
-				editor->physicsButton.sprites[i].params.corners_rounding[3].radius = gui_round_radius_default;
-			} else {
-				editor->physicsButton.sprites[i].params.disableCornerRounding();
-			}
-
-			if (gui_round_enabled) {
 				editor->navtestButton.sprites[i].params.enableCornerRounding();
 				editor->navtestButton.sprites[i].params.corners_rounding[0].radius = gui_round_radius_default;
 				editor->navtestButton.sprites[i].params.corners_rounding[1].radius = gui_round_radius_default;
@@ -1041,13 +1006,6 @@ void GeneralWindow::Create(EditorComponent* _editor)
 			}
 
 			if (gui_round_enabled) {
-				editor->playButton.sprites[i].params.enableCornerRounding();
-				editor->playButton.sprites[i].params.corners_rounding[0].radius = gui_round_radius_default;
-			} else {
-				editor->playButton.sprites[i].params.disableCornerRounding();
-			}
-
-			if (gui_round_enabled) {
 				editor->projectCreatorButton.sprites[i].params.enableCornerRounding();
 				editor->projectCreatorButton.sprites[i].params.corners_rounding[1].radius = gui_round_radius_default;
 			} else {
@@ -1082,14 +1040,6 @@ void GeneralWindow::Create(EditorComponent* _editor)
 				editor->navtestButton.sprites[i].params.corners_rounding[2].radius = gui_round_radius_default;
 			} else {
 				editor->navtestButton.sprites[i].params.disableCornerRounding();
-			}
-
-			if (gui_round_enabled) {
-				editor->physicsButton.sprites[i].params.enableCornerRounding();
-				editor->physicsButton.sprites[i].params.corners_rounding[2].radius = gui_round_radius_default;
-				editor->physicsButton.sprites[i].params.corners_rounding[3].radius = gui_round_radius_default;
-			} else {
-				editor->physicsButton.sprites[i].params.disableCornerRounding();
 			}
 
 			if (gui_round_enabled) {
@@ -1310,16 +1260,6 @@ void GeneralWindow::Create(EditorComponent* _editor)
 		XMFLOAT2 gradient_end = XMFLOAT2(0, 0.32f);
 		for (int i = 0; i < /*arraysize(wi::gui::Widget::sprites)*/1; ++i)
 		{
-			editor->playButton.sprites[i].params.gradient = gradient;
-			editor->playButton.sprites[i].params.gradient_color = theme_color_gradient;
-			editor->playButton.sprites[i].params.gradient_uv_start = gradient_start;
-			editor->playButton.sprites[i].params.gradient_uv_end = gradient_end;
-
-			editor->stopButton.sprites[i].params.gradient = gradient;
-			editor->stopButton.sprites[i].params.gradient_color = theme_color_gradient;
-			editor->stopButton.sprites[i].params.gradient_uv_start = gradient_start;
-			editor->stopButton.sprites[i].params.gradient_uv_end = gradient_end;
-
 			editor->projectCreatorButton.sprites[i].params.gradient = gradient;
 			editor->projectCreatorButton.sprites[i].params.gradient_color = theme_color_gradient;
 			editor->projectCreatorButton.sprites[i].params.gradient_uv_start = gradient_start;
@@ -1588,8 +1528,6 @@ void GeneralWindow::ResizeLayout()
 	layout.add_right(placeInFrontOfCameraCheckBox);
 
 	layout.add(wireFrameComboBox);
-	layout.add_right(physicsDebugCheckBox);
-	layout.add(physicsDebugMaxDistanceSlider);
 	layout.add_right(nameDebugCheckBox);
 	layout.add_right(gridHelperCheckBox);
 	layout.add_right(aabbDebugCheckBox);

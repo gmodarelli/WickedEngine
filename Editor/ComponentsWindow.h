@@ -17,9 +17,6 @@
 #include "TransformWindow.h"
 #include "LayerWindow.h"
 #include "NameWindow.h"
-#include "ScriptWindow.h"
-#include "RigidBodyWindow.h"
-#include "SoftBodyWindow.h"
 #include "ColliderWindow.h"
 #include "HierarchyWindow.h"
 #include "CameraComponentWindow.h"
@@ -31,7 +28,6 @@
 #include "FontWindow.h"
 #include "VoxelGridWindow.h"
 #include "MetadataWindow.h"
-#include "ConstraintWindow.h"
 #include "SplineWindow.h"
 #include "GaussianSplatWindow.h"
 
@@ -65,9 +61,6 @@ public:
 	TransformWindow transformWnd;
 	LayerWindow layerWnd;
 	NameWindow nameWnd;
-	ScriptWindow scriptWnd;
-	RigidBodyWindow rigidWnd;
-	SoftBodyWindow softWnd;
 	ColliderWindow colliderWnd;
 	HierarchyWindow hierarchyWnd;
 	CameraComponentWindow cameraComponentWnd;
@@ -79,7 +72,6 @@ public:
 	FontWindow fontWnd;
 	VoxelGridWindow voxelGridWnd;
 	MetadataWindow metadataWnd;
-	ConstraintWindow constraintWnd;
 	SplineWindow splineWnd;
 	GaussianSplatWindow gaussiansplatWnd;
 
@@ -102,7 +94,7 @@ public:
 		Camera = 1ull << 14ull,
 		Armature = 1ull << 15ull,
 		Collider = 1ull << 16ull,
-		Script = 1ull << 17ull,
+		// Script = 1ull << 17ull,
 		Expression = 1ull << 18ull,
 		Terrain = 1ull << 19ull,
 		Spring = 1ull << 20ull,
@@ -111,11 +103,11 @@ public:
 		Sprite = 1ull << 23ull,
 		Font = 1ull << 24ull,
 		VoxelGrid = 1ull << 25ull,
-		RigidBody = 1ull << 26ull,
-		SoftBody = 1ull << 27ull,
+		// RigidBody = 1ull << 26ull,
+		// SoftBody = 1ull << 27ull,
 		Metadata = 1ull << 28ull,
-		Vehicle = 1ull << 29ull,
-		Constraint = 1ull << 30ull,
+		// Vehicle = 1ull << 29ull,
+		// Constraint = 1ull << 30ull,
 		Spline = 1ull << 31ull,
 		GaussianSplat = 1ull << 32ull,
 

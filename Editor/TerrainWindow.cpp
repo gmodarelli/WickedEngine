@@ -686,16 +686,6 @@ void TerrainWindow::Create(EditorComponent* _editor)
 		});
 	AddWidget(&grassCheckBox);
 
-	physicsCheckBox.Create("Physics: ");
-	physicsCheckBox.SetTooltip("Specify whether physics is enabled for terrain chunks.");
-	physicsCheckBox.SetSize(XMFLOAT2(hei, hei));
-	physicsCheckBox.SetPos(XMFLOAT2(x, y += step));
-	physicsCheckBox.SetCheck(true);
-	physicsCheckBox.OnClick([=](wi::gui::EventArgs args) {
-		terrain->SetPhysicsEnabled(args.bValue);
-		});
-	AddWidget(&physicsCheckBox);
-
 	tessellationCheckBox.Create("Tessellation: ");
 	tessellationCheckBox.SetTooltip("Specify whether tessellation is enabled for terrain surface.\nTessellation requires GPU hardware support\nTessellation doesn't work with raytracing effects or Visibility Compute Shading rendering mode.");
 	tessellationCheckBox.SetSize(XMFLOAT2(hei, hei));
@@ -1309,7 +1299,6 @@ void TerrainWindow::SetEntity(Entity entity)
 	centerToCamCheckBox.SetCheck(terrain->IsCenterToCamEnabled());
 	removalCheckBox.SetCheck(terrain->IsRemovalEnabled());
 	grassCheckBox.SetCheck(terrain->IsGrassEnabled());
-	physicsCheckBox.SetCheck(terrain->IsPhysicsEnabled());
 	tessellationCheckBox.SetCheck(terrain->IsTessellationEnabled());
 	lodSlider.SetValue(terrain->lod_bias);
 	generationSlider.SetValue((float)terrain->generation);
@@ -1826,7 +1815,6 @@ void TerrainWindow::ResizeLayout()
 	layout.add_right(removalCheckBox);
 	centerToCamCheckBox.SetPos(XMFLOAT2(removalCheckBox.GetPos().x - 100, removalCheckBox.GetPos().y));
 	layout.add_right(grassCheckBox);
-	physicsCheckBox.SetPos(XMFLOAT2(grassCheckBox.GetPos().x - 100, grassCheckBox.GetPos().y));
 	layout.add_right(tessellationCheckBox);
 	layout.add(lodSlider);
 	layout.add(generationSlider);

@@ -18,8 +18,6 @@ public:
 	wi::gui::ComboBox entityTreeSortingComboBox;
 	wi::gui::ComboBox languageCombo;
 
-	wi::gui::CheckBox physicsDebugCheckBox;
-	wi::gui::Slider physicsDebugMaxDistanceSlider;
 	wi::gui::CheckBox nameDebugCheckBox;
 	wi::gui::CheckBox gridHelperCheckBox;
 	wi::gui::CheckBox aabbDebugCheckBox;

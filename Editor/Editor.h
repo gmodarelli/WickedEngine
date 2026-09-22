@@ -27,18 +27,10 @@ public:
 	wi::gui::Button scaleButton;
 	wi::gui::Button localGlobalButton;
 
-	wi::gui::Button physicsButton;
-
 	wi::gui::Button dummyButton;
 	bool dummy_enabled = false;
 	bool dummy_male = false;
 	XMFLOAT3 dummy_pos = XMFLOAT3(0, 0, 0);
-
-	bool drive_mode = false;
-	float drive_cam_dist_next = 7;
-	float drive_cam_dist = drive_cam_dist_next;
-	float drive_orbit_horizontal = 0;
-	float drive_steering_smoothed = 0;
 
 	wi::gui::Button navtestButton;
 	bool navtest_enabled = false;
@@ -46,8 +38,6 @@ public:
 	wi::scene::PickResult navtest_goal_pick;
 	wi::PathQuery navtest_pathquery;
 
-	wi::gui::Button playButton;
-	wi::gui::Button stopButton;
 	wi::gui::Button projectCreatorButton;
 
 	wi::gui::Button saveButton;

@@ -449,27 +449,21 @@ void AnimationWindow::Create(EditorComponent* _editor)
 					paths.push_back(AnimationComponent::AnimationChannel::Path::CAMERA_APERTURE_SHAPE);
 					break;
 				case 18:
-					paths.push_back(AnimationComponent::AnimationChannel::Path::SCRIPT_PLAY);
-					break;
-				case 19:
-					paths.push_back(AnimationComponent::AnimationChannel::Path::SCRIPT_STOP);
-					break;
-				case 20:
 					paths.push_back(AnimationComponent::AnimationChannel::Path::MATERIAL_COLOR);
 					break;
-				case 21:
+				case 19:
 					paths.push_back(AnimationComponent::AnimationChannel::Path::MATERIAL_EMISSIVE);
 					break;
-				case 22:
+				case 20:
 					paths.push_back(AnimationComponent::AnimationChannel::Path::MATERIAL_ROUGHNESS);
 					break;
-				case 23:
+				case 21:
 					paths.push_back(AnimationComponent::AnimationChannel::Path::MATERIAL_METALNESS);
 					break;
-				case 24:
+				case 22:
 					paths.push_back(AnimationComponent::AnimationChannel::Path::MATERIAL_REFLECTANCE);
 					break;
-				case 25:
+				case 23:
 					paths.push_back(AnimationComponent::AnimationChannel::Path::MATERIAL_TEXMULADD);
 					break;
 				}
@@ -748,21 +742,6 @@ void AnimationWindow::Create(EditorComponent* _editor)
 								{
 									animation_data->keyframe_data.push_back(camera->aperture_shape.x);
 									animation_data->keyframe_data.push_back(camera->aperture_shape.y);
-								}
-								else
-								{
-									animation_data->keyframe_times.pop_back();
-									animation->channels.pop_back();
-								}
-							}
-							break;
-							case wi::scene::AnimationComponent::AnimationChannel::Path::SCRIPT_PLAY:
-							case wi::scene::AnimationComponent::AnimationChannel::Path::SCRIPT_STOP:
-							{
-								const ScriptComponent* script = scene.scripts.GetComponent(channel.target);
-								if (script != nullptr)
-								{
-									// no data
 								}
 								else
 								{
@@ -1237,12 +1216,6 @@ void AnimationWindow::RefreshKeyframesList()
 			break;
 		case wi::scene::AnimationComponent::AnimationChannel::Path::CAMERA_APERTURE_SHAPE:
 			item.name += ICON_CAMERA " [aperture shape] ";
-			break;
-		case wi::scene::AnimationComponent::AnimationChannel::Path::SCRIPT_PLAY:
-			item.name += ICON_SCRIPT " [play] ";
-			break;
-		case wi::scene::AnimationComponent::AnimationChannel::Path::SCRIPT_STOP:
-			item.name += ICON_SCRIPT " [stop] ";
 			break;
 		case wi::scene::AnimationComponent::AnimationChannel::Path::MATERIAL_COLOR:
 			item.name += ICON_MATERIAL " [color] ";

@@ -25,8 +25,6 @@ void PaintToolWindow::Create(EditorComponent* _editor)
 	modeComboBox.AddItem(ICON_TERRAIN " Terrain material", MODE_TERRAIN_MATERIAL);
 	modeComboBox.AddItem(ICON_MESH " Sculpting - Add", MODE_SCULPTING_ADD);
 	modeComboBox.AddItem(ICON_MESH " Sculpting - Subtract", MODE_SCULPTING_SUBTRACT);
-	modeComboBox.AddItem(ICON_SOFTBODY " Softbody - Pinning", MODE_SOFTBODY_PINNING);
-	modeComboBox.AddItem(ICON_SOFTBODY " Softbody - Physics", MODE_SOFTBODY_PHYSICS);
 	modeComboBox.AddItem(ICON_HAIR " Hairparticle - Add Triangle", MODE_HAIRPARTICLE_ADD_TRIANGLE);
 	modeComboBox.AddItem(ICON_HAIR " Hairparticle - Remove Triangle", MODE_HAIRPARTICLE_REMOVE_TRIANGLE);
 	modeComboBox.AddItem(ICON_HAIR " Hairparticle - Length (Alpha)", MODE_HAIRPARTICLE_LENGTH);
@@ -53,12 +51,6 @@ void PaintToolWindow::Create(EditorComponent* _editor)
 			break;
 		case MODE_SCULPTING_SUBTRACT:
 			infoLabel.SetText("In sculpt - SUBTRACT mode, you can modify vertex positions by SUBTRACT operation along normal vector (average normal of vertices touched by brush).");
-			break;
-		case MODE_SOFTBODY_PINNING:
-			infoLabel.SetText("In soft body pinning mode, the soft body vertices can be pinned down (so they will be fixed and drive physics)");
-			break;
-		case MODE_SOFTBODY_PHYSICS:
-			infoLabel.SetText("In soft body physics mode, the soft body vertices can be unpinned (so they will be simulated by physics)");
 			break;
 		case MODE_HAIRPARTICLE_ADD_TRIANGLE:
 			infoLabel.SetText("In hair particle add triangle mode, you can add triangles to the hair base mesh.\nThis will modify random distribution of hair!");
@@ -1093,103 +1085,6 @@ void PaintToolWindow::UpdateData(float dt)
 		}
 		break;
 
-		case MODE_SOFTBODY_PINNING:
-		case MODE_SOFTBODY_PHYSICS:
-		{
-			Ray pickRay = editor->pickRay;
-			brushIntersect = wi::scene::Pick(pickRay, wi::enums::FILTER_OBJECT_ALL, ~0u, scene);
-			if (brushIntersect.entity == INVALID_ENTITY)
-				break;
-
-			const Sphere sphere = Sphere(brushIntersect.position, radius);
-			const XMVECTOR CENTER = XMLoadFloat3(&sphere.center);
-
-			for (size_t objectIndex = 0; objectIndex < scene.objects.GetCount(); ++objectIndex)
-			{
-				if (!sphere.intersects(scene.aabb_objects[objectIndex]))
-					continue;
-
-				Entity entity = scene.objects.GetEntity(objectIndex);
-				ObjectComponent& object = scene.objects[objectIndex];
-				if (object.meshID == INVALID_ENTITY)
-					continue;
-
-				const MeshComponent* mesh = scene.meshes.GetComponent(object.meshID);
-				if (mesh == nullptr)
-					continue;
-
-				SoftBodyPhysicsComponent* softbody = scene.softbodies.GetComponent(object.meshID);
-				if (softbody == nullptr || softbody->physicsobject == nullptr)
-					continue;
-
-				// Painting:
-				if (painting)
-				{
-					for (size_t j = 0; j < mesh->vertex_positions.size(); ++j)
-					{
-						XMVECTOR P = SkinVertex(*mesh, *softbody, (uint32_t)j);
-
-						const float dist = wi::math::Distance(P, CENTER);
-						if (dist <= pressure_radius)
-						{
-							RecordHistory(object.meshID);
-							softbody->weights[j] = (mode == MODE_SOFTBODY_PINNING ? 0.0f : 1.0f);
-							softbody->Reset();
-						}
-					}
-				}
-
-				// Visualizing:
-				const XMMATRIX W = XMLoadFloat4x4(&softbody->worldMatrix);
-				uint32_t first_subset = 0;
-				uint32_t last_subset = 0;
-				mesh->GetLODSubsetRange(0, first_subset, last_subset);
-				for (uint32_t subsetIndex = first_subset; subsetIndex < last_subset; ++subsetIndex)
-				{
-					const MeshComponent::MeshSubset& subset = mesh->subsets[subsetIndex];
-					for (size_t j = 0; j < subset.indexCount; j += 3)
-					{
-						const uint32_t i0 = mesh->indices[j + 0];
-						const uint32_t i1 = mesh->indices[j + 1];
-						const uint32_t i2 = mesh->indices[j + 2];
-						const float weight0 = softbody->weights[i0];
-						const float weight1 = softbody->weights[i1];
-						const float weight2 = softbody->weights[i2];
-						XMVECTOR N0 = XMVectorZero(), N1 = XMVectorZero(), N2 = XMVectorZero();
-						wi::renderer::RenderableTriangle tri;
-						XMVECTOR P0 = SkinVertex(*mesh, *softbody, i0, &N0);
-						XMVECTOR P1 = SkinVertex(*mesh, *softbody, i1, &N1);
-						XMVECTOR P2 = SkinVertex(*mesh, *softbody, i2, &N2);
-						XMStoreFloat3(&tri.positionA, P0 + N0 * 0.01f);
-						XMStoreFloat3(&tri.positionB, P1 + N1 * 0.01f);
-						XMStoreFloat3(&tri.positionC, P2 + N2 * 0.01f);
-						if (weight0 == 0)
-							tri.colorA = XMFLOAT4(1, 1, 0, 1);
-						else
-							tri.colorA = XMFLOAT4(1, 1, 1, 1);
-						if (weight1 == 0)
-							tri.colorB = XMFLOAT4(1, 1, 0, 1);
-						else
-							tri.colorB = XMFLOAT4(1, 1, 1, 1);
-						if (weight2 == 0)
-							tri.colorC = XMFLOAT4(1, 1, 0, 1);
-						else
-							tri.colorC = XMFLOAT4(1, 1, 1, 1);
-						if (wireframe)
-						{
-							wi::renderer::DrawTriangle(tri, true);
-						}
-						if (weight0 == 0 && weight1 == 0 && weight2 == 0)
-						{
-							tri.colorA = tri.colorB = tri.colorC = XMFLOAT4(1, 0, 0, 0.8f);
-							wi::renderer::DrawTriangle(tri);
-						}
-					}
-				}
-			}
-		}
-		break;
-
 		case MODE_HAIRPARTICLE_ADD_TRIANGLE:
 		case MODE_HAIRPARTICLE_REMOVE_TRIANGLE:
 		case MODE_HAIRPARTICLE_LENGTH:
@@ -1564,16 +1459,6 @@ void PaintToolWindow::WriteHistoryData(Entity entity, wi::Archive& archive, Comm
 		archive << mesh->vertex_normals;
 	}
 	break;
-	case PaintToolWindow::MODE_SOFTBODY_PINNING:
-	case PaintToolWindow::MODE_SOFTBODY_PHYSICS:
-	{
-		SoftBodyPhysicsComponent* softbody = scene.softbodies.GetComponent(entity);
-		if (softbody == nullptr)
-			break;
-
-		archive << softbody->weights;
-	}
-	break;
 	case PaintToolWindow::MODE_HAIRPARTICLE_ADD_TRIANGLE:
 	case PaintToolWindow::MODE_HAIRPARTICLE_REMOVE_TRIANGLE:
 	case PaintToolWindow::MODE_HAIRPARTICLE_LENGTH:
@@ -1755,20 +1640,6 @@ void PaintToolWindow::ConsumeHistoryOperation(wi::Archive& archive, bool undo)
 					}
 				}
 			}
-		}
-		break;
-		case PaintToolWindow::MODE_SOFTBODY_PINNING:
-		case PaintToolWindow::MODE_SOFTBODY_PHYSICS:
-		{
-			SoftBodyPhysicsComponent* softbody = scene.softbodies.GetComponent(entity);
-			if (softbody == nullptr)
-				break;
-
-			SoftBodyPhysicsComponent archive_softbody;
-			archive >> archive_softbody.weights;
-
-			softbody->weights = archive_softbody.weights;
-			softbody->Reset();
 		}
 		break;
 		case PaintToolWindow::MODE_HAIRPARTICLE_ADD_TRIANGLE:

@@ -101,7 +101,6 @@ public:
 	wi::gui::CheckBox centerToCamCheckBox;
 	wi::gui::CheckBox removalCheckBox;
 	wi::gui::CheckBox grassCheckBox;
-	wi::gui::CheckBox physicsCheckBox;
 	wi::gui::CheckBox tessellationCheckBox;
 	wi::gui::Slider lodSlider;
 	wi::gui::Slider generationSlider;
