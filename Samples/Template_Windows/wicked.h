@@ -23,3 +23,4 @@ void wicked_set_shader_source_path(const char* path);
 void wicked_set_window(void* handle);
 void wicked_run(Wicked_Camera camera, Movable_Entity* movable_entities, uint32_t movable_entity_count);
 void wicked_shutdown();
+void wicked_load_prefab(const char* prefab_path);

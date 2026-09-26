@@ -5,30 +5,28 @@ using namespace wi::ecs;
 using namespace wi::scene;
 using namespace wi::graphics;
 
+std::hash<std::string> string_hasher;
+
+const char* g_tripod_prefab_path = "content\\prefabs\\pb_fire_tripod.wiscene";
+
 Wicked_Camera g_wicked_camera;
 Movable_Entity* g_movable_entities;
 uint32_t g_movable_entity_count;
+wi::unordered_map<size_t, Entity> g_prefab_map;
 
 class Tides_Renderer : public wi::RenderPath3D
 {
-	// wi::gui::Label label;
 	Entity sunlight = INVALID_ENTITY;
-	Entity cubeMesh = INVALID_ENTITY;
-	Entity fire_tripod = INVALID_ENTITY;
-	Entity props_material = INVALID_ENTITY;
 
 	wi::unordered_map<uint64_t, size_t> movable_object_map;
 	wi::vector<Entity> movable_objects;
-
-	wi::unordered_map<uint64_t, size_t> prefab_map;
-	wi::vector<Entity> prefabs;
 
 public:
 	void Load() override
 	{
 		// TODO: Load from config
-		setSSREnabled(true);
-		setSSGIEnabled(true);
+		setSSREnabled(false);
+		setSSGIEnabled(false);
 		setMotionBlurEnabled(false);
 		setDepthOfFieldEnabled(false);
 		setEyeAdaptionEnabled(false);
@@ -40,38 +38,13 @@ public:
 		setFSREnabled(false);
 		setFSR2Enabled(false);
 
-		// label.Create("Label1");
-		// label.SetText("Tides of Revival");
-		// label.font.params.h_align = wi::font::WIFALIGN_CENTER;
-		// label.SetSize(XMFLOAT2(240, 20));
-		// label.SetPos(XMFLOAT2(0, 100));
-		// GetGUI().AddWidget(&label);
-
 		Scene& scene = wi::scene::GetScene();
 		wi::renderer::ClearWorld(scene);
 
-		// Create default cube mesh
-		{
-			cubeMesh = scene.Entity_CreateCube("Default Cube");
-			ObjectComponent* object = scene.objects.GetComponent(cubeMesh);
-			object->SetRenderable(false);
-		}
-
-		// Load prefabs test
-		{
-			wi::scene::LoadModel("content\\materials\\meadow_props.wiscene");
-			// HACK
-			props_material = scene.materials.GetEntity(scene.materials.GetCount() - 1);
-
-			wi::scene::LoadModel("content\\prefabs\\sm_fire_tripod.wiscene");
-			MeshComponent& mesh = scene.meshes.GetData()[scene.meshes.GetCount() - 1];
-			mesh.subsets[0].materialID = props_material;
-			fire_tripod = scene.meshes.GetEntity(scene.meshes.GetCount() - 1);
-
-			// wilog("Materials count: %lld", scene.materials.GetCount());
-			// Entity fireplace_1 = wi::scene::LoadModel("content\\prefabs\\prop_fireplace_1.wiscene");
-			// wilog("Materials count: %lld", scene.materials.GetCount());
-		}
+		// // Load prefabs test
+		// {
+		// 	wicked_load_prefab(g_tripod_prefab_path);
+		// }
 
 		// Create sun light
 		{
@@ -101,29 +74,31 @@ public:
 		scene.weather.SetVolumetricClouds(true);
 
 		TransformComponent transform;
-		transform.Translate(XMFLOAT3(0, 2.f, -4.5f));
+		transform.Translate(XMFLOAT3(0, 0, 0));
 		transform.UpdateTransform();
+		wi::scene::GetCamera().TransformCamera(transform);
+
 		this->ClearSprites();
 		this->ClearFonts();
-		wi::scene::GetCamera().TransformCamera(transform);
 
 		RenderPath3D::Load();
 	}
 
 	void Update(float dt) override
 	{
-		// CameraComponent& camera = wi::scene::GetCamera();
+		CameraComponent& camera = wi::scene::GetCamera();
 
-		// TransformComponent transform;
-		// transform.Translate(XMFLOAT3(g_wicked_camera.position[0], g_wicked_camera.position[1], g_wicked_camera.position[2]));
-		// transform.Rotate(XMFLOAT4(g_wicked_camera.orientation[0], g_wicked_camera.orientation[1], g_wicked_camera.orientation[2], g_wicked_camera.orientation[3]));
-		// transform.UpdateTransform();
-		// camera.TransformCamera(transform);
-		// camera.zNearP = g_wicked_camera.near_plane;
-		// camera.zFarP = g_wicked_camera.far_plane;
-		// camera.fov = g_wicked_camera.fov_vertical;
+		TransformComponent transform;
+		transform.Translate(XMFLOAT3(g_wicked_camera.position[0], g_wicked_camera.position[1], g_wicked_camera.position[2]));
+		transform.Rotate(XMFLOAT4(g_wicked_camera.orientation[0], g_wicked_camera.orientation[1], g_wicked_camera.orientation[2], g_wicked_camera.orientation[3]));
+		transform.UpdateTransform();
+		camera.TransformCamera(transform);
+		camera.zNearP = g_wicked_camera.near_plane;
+		camera.zFarP = g_wicked_camera.far_plane;
+		camera.fov = g_wicked_camera.fov_vertical;
 
 		Scene& scene = wi::scene::GetScene();
+		auto prefab_entry = g_prefab_map.find(string_hasher(g_tripod_prefab_path));
 
 		if (g_movable_entities != nullptr)
 		{
@@ -149,28 +124,12 @@ public:
 				}
 				else
 				{
-					Entity entity = CreateEntity();
-					TransformComponent& transform = scene.transforms.Create(entity);
-					transform.scale_local.x = movable_entity.scale[0];
-					transform.scale_local.y = movable_entity.scale[1];
-					transform.scale_local.z = movable_entity.scale[2];
-					transform.translation_local.x = movable_entity.position[0];
-					transform.translation_local.y = movable_entity.position[1];
-					transform.translation_local.z = movable_entity.position[2];
-					transform.rotation_local.x = movable_entity.orientation[0];
-					transform.rotation_local.y = movable_entity.orientation[1];
-					transform.rotation_local.z = movable_entity.orientation[2];
-					transform.rotation_local.w = movable_entity.orientation[3];
-					transform.SetDirty();
-
-					ObjectComponent& object = scene.objects.Create(entity);
-					object.SetRenderable(true);
-					object.SetCastShadow(true);
-					object.SetDynamic(true);
-					object.meshID = fire_tripod;
-
-					movable_object_map.emplace(movable_entity.game_entity, movable_objects.size());
-					movable_objects.emplace_back(entity);
+					if (prefab_entry != g_prefab_map.end())
+					{
+						Entity entity = InstantiateMovableEntity(prefab_entry->second, movable_entity);
+						movable_object_map.emplace(movable_entity.game_entity, movable_objects.size());
+						movable_objects.emplace_back(entity);
+					}
 				}
 			}
 		}
@@ -181,6 +140,36 @@ public:
 	void Render() const override
 	{
 		RenderPath3D::Render();
+	}
+
+private:
+	Entity InstantiateMovableEntity(Entity const& source_entity, Movable_Entity const& movable_entity)
+	{
+		Scene& scene = wi::scene::GetScene();
+
+		Entity entity = CreateEntity();
+
+		TransformComponent& transform = scene.transforms.Create(entity);
+		ObjectComponent& object = scene.objects.Create(entity);
+
+		transform.scale_local.x = movable_entity.scale[0];
+		transform.scale_local.y = movable_entity.scale[1];
+		transform.scale_local.z = movable_entity.scale[2];
+		transform.translation_local.x = movable_entity.position[0];
+		transform.translation_local.y = movable_entity.position[1];
+		transform.translation_local.z = movable_entity.position[2];
+		transform.rotation_local.x = movable_entity.orientation[0];
+		transform.rotation_local.y = movable_entity.orientation[1];
+		transform.rotation_local.z = movable_entity.orientation[2];
+		transform.rotation_local.w = movable_entity.orientation[3];
+		transform.SetDirty();
+
+		object.SetRenderable(true);
+		object.SetCastShadow(true);
+		object.SetDynamic(true);
+		object.meshID = source_entity;
+
+		return entity;
 	}
 };
 
@@ -244,4 +233,17 @@ void wicked_shutdown()
 {
 	application.Exit();
 	wi::jobsystem::ShutDown(); // waits for jobs to finish before shutdown
+}
+
+void wicked_load_prefab(const char* prefab_path)
+{
+	Entity prefab = wi::scene::LoadModel(prefab_path);
+
+	// TODO(pixeljuice): Figure out why we get a null reference here
+	Scene& scene = wi::scene::GetScene();
+	ObjectComponent* object = scene.objects.GetComponent(prefab);
+	if (object) object->SetRenderable(false);
+
+	size_t prefab_key = string_hasher(prefab_path);
+	g_prefab_map.emplace(prefab_key, prefab);
 }
