@@ -41,10 +41,10 @@ public:
 		Scene& scene = wi::scene::GetScene();
 		wi::renderer::ClearWorld(scene);
 
-		// // Load prefabs test
-		// {
-		// 	wicked_load_prefab(g_tripod_prefab_path);
-		// }
+		// Load prefabs test
+		{
+			wicked_load_prefab(g_tripod_prefab_path);
+		}
 
 		// Create sun light
 		{
@@ -82,6 +82,8 @@ public:
 		this->ClearFonts();
 
 		RenderPath3D::Load();
+
+		movable_object_map.clear();
 	}
 
 	void Update(float dt) override
@@ -98,7 +100,8 @@ public:
 		camera.fov = g_wicked_camera.fov_vertical;
 
 		Scene& scene = wi::scene::GetScene();
-		auto prefab_entry = g_prefab_map.find(string_hasher(g_tripod_prefab_path));
+		size_t prefab_key = string_hasher(g_tripod_prefab_path);
+		auto prefab_entry = g_prefab_map.find(prefab_key);
 
 		if (g_movable_entities != nullptr)
 		{
@@ -148,10 +151,9 @@ private:
 		Scene& scene = wi::scene::GetScene();
 
 		Entity entity = CreateEntity();
+		scene.layers.Create(entity).layerMask = ~0;
 
 		TransformComponent& transform = scene.transforms.Create(entity);
-		ObjectComponent& object = scene.objects.Create(entity);
-
 		transform.scale_local.x = movable_entity.scale[0];
 		transform.scale_local.y = movable_entity.scale[1];
 		transform.scale_local.z = movable_entity.scale[2];
@@ -164,6 +166,7 @@ private:
 		transform.rotation_local.w = movable_entity.orientation[3];
 		transform.SetDirty();
 
+		ObjectComponent& object = scene.objects.Create(entity);
 		object.SetRenderable(true);
 		object.SetCastShadow(true);
 		object.SetDynamic(true);
@@ -237,12 +240,43 @@ void wicked_shutdown()
 
 void wicked_load_prefab(const char* prefab_path)
 {
-	Entity prefab = wi::scene::LoadModel(prefab_path);
+	// Entity prefab = wi::scene::LoadModel(prefab_path);
+	wi::scene::LoadModel(prefab_path);
+	wi::backlog::post("Prefab loaded succesfully: " + std::string(prefab_path),  wi::backlog::LogLevel::Warning);
 
-	// TODO(pixeljuice): Figure out why we get a null reference here
 	Scene& scene = wi::scene::GetScene();
+	// HACK: Retrieve the loaded entity ID from the last object component
+	Entity prefab = scene.objects.GetEntity(scene.objects.GetCount() - 1);
+
 	ObjectComponent* object = scene.objects.GetComponent(prefab);
-	if (object) object->SetRenderable(false);
+	if (object)
+	{
+		object->SetRenderable(false);
+	}
+	else
+	{
+		wi::backlog::post("\tPrefab DOES NOT have an object component",  wi::backlog::LogLevel::Error);
+	}
+
+	// MeshComponent* mesh = scene.meshes.GetComponent(prefab);
+	// if (mesh)
+	// {
+	// 	wi::backlog::post("\tPrefab has a mesh component",  wi::backlog::LogLevel::Warning);
+	// }
+	// else
+	// {
+	// 	wi::backlog::post("\tPrefab DOES NOT have a mesh component",  wi::backlog::LogLevel::Error);
+	// }
+
+	// MaterialComponent* material = scene.materials.GetComponent(prefab);
+	// if (material)
+	// {
+	// 	wi::backlog::post("\tPrefab has a material component",  wi::backlog::LogLevel::Warning);
+	// }
+	// else
+	// {
+	// 	wi::backlog::post("\tPrefab DOES NOT have a material component",  wi::backlog::LogLevel::Error);
+	// }
 
 	size_t prefab_key = string_hasher(prefab_path);
 	g_prefab_map.emplace(prefab_key, prefab);
