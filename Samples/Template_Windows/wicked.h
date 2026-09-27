@@ -25,5 +25,6 @@ void wicked_set_window(void* handle);
 void wicked_run(Wicked_Camera camera, Movable_Entity* movable_entities, uint32_t movable_entity_count);
 void wicked_shutdown();
 void wicked_enable_profiler(bool value);
+void wicked_enable_vsync(bool value);
 void wicked_load_prefab(const char* prefab_path);
 void wicked_load_prefab_from_memory(uint64_t prefab_hash, const uint8_t* data, size_t size);
