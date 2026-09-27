@@ -9,6 +9,16 @@ struct Wicked_Camera
 	float far_plane;
 };
 
+struct Static_Entity
+{
+	float orientation[4];
+	float position[3];
+	float scale[3];
+	float _padding[2];
+	uint64_t game_entity;
+	uint64_t prefab_hash;
+};
+
 struct Movable_Entity
 {
 	float orientation[4];
@@ -22,7 +32,7 @@ struct Movable_Entity
 void wicked_set_shader_path(const char* path);
 void wicked_set_shader_source_path(const char* path);
 void wicked_set_window(void* handle);
-void wicked_run(Wicked_Camera camera, Movable_Entity* movable_entities, uint32_t movable_entity_count);
+void wicked_run(Wicked_Camera camera, Movable_Entity* movable_entities, uint32_t movable_entity_count, Static_Entity* static_entities, uint32_t static_entity_count);
 void wicked_shutdown();
 void wicked_toggle_profiler();
 void wicked_toggle_vsync();

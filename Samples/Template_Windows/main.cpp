@@ -6,6 +6,8 @@ using namespace wi::scene;
 using namespace wi::graphics;
 
 Wicked_Camera g_wicked_camera;
+Static_Entity* g_static_entities;
+uint32_t g_static_entity_count;
 Movable_Entity* g_movable_entities;
 uint32_t g_movable_entity_count;
 wi::unordered_map<size_t, Entity> g_prefab_map;
@@ -16,6 +18,9 @@ class Tides_Renderer : public wi::RenderPath3D
 
 	wi::unordered_map<uint64_t, size_t> movable_object_map;
 	wi::vector<Entity> movable_objects;
+
+	wi::unordered_map<uint64_t, size_t> static_object_map;
+	wi::vector<Entity> static_objects;
 
 public:
 	void Load() override
@@ -74,6 +79,7 @@ public:
 
 		RenderPath3D::Load();
 
+		static_object_map.clear();
 		movable_object_map.clear();
 	}
 
@@ -91,6 +97,25 @@ public:
 		camera.fov = g_wicked_camera.fov_vertical;
 
 		Scene& scene = wi::scene::GetScene();
+
+		if (g_static_entities != nullptr)
+		{
+			for (uint32_t i = 0; i < g_static_entity_count; i++)
+			{
+				const Static_Entity& static_entity = g_static_entities[i];
+				auto it = static_object_map.find(static_entity.game_entity);
+				if (it == static_object_map.end())
+				{
+					auto prefab_entry = g_prefab_map.find(static_entity.prefab_hash);
+					if (prefab_entry != g_prefab_map.end())
+					{
+						Entity entity = InstantiateEntity(prefab_entry->second, static_entity);
+						static_object_map.emplace(static_entity.game_entity, static_objects.size());
+						static_objects.emplace_back(entity);
+					}
+				}
+			}
+		}
 
 		if (g_movable_entities != nullptr)
 		{
@@ -119,7 +144,7 @@ public:
 					auto prefab_entry = g_prefab_map.find(movable_entity.prefab_hash);
 					if (prefab_entry != g_prefab_map.end())
 					{
-						Entity entity = InstantiateMovableEntity(prefab_entry->second, movable_entity);
+						Entity entity = InstantiateEntity(prefab_entry->second, movable_entity);
 						movable_object_map.emplace(movable_entity.game_entity, movable_objects.size());
 						movable_objects.emplace_back(entity);
 					}
@@ -136,7 +161,38 @@ public:
 	}
 
 private:
-	Entity InstantiateMovableEntity(Entity const& source_entity, Movable_Entity const& movable_entity)
+	Entity InstantiateEntity(Entity const& source_entity, Static_Entity const& static_entity)
+	{
+		Scene& scene = wi::scene::GetScene();
+
+		Entity entity = CreateEntity();
+		scene.layers.Create(entity).layerMask = ~0;
+
+		TransformComponent& transform = scene.transforms.Create(entity);
+		transform.scale_local.x = static_entity.scale[0];
+		transform.scale_local.y = static_entity.scale[1];
+		transform.scale_local.z = static_entity.scale[2];
+		transform.translation_local.x = static_entity.position[0];
+		transform.translation_local.y = static_entity.position[1];
+		transform.translation_local.z = static_entity.position[2];
+		transform.rotation_local.x = static_entity.orientation[0];
+		transform.rotation_local.y = static_entity.orientation[1];
+		transform.rotation_local.z = static_entity.orientation[2];
+		transform.rotation_local.w = static_entity.orientation[3];
+		transform.SetDirty();
+
+		ObjectComponent& object = scene.objects.Create(entity);
+		object.SetRenderable(true);
+		object.SetCastShadow(true);
+		object.SetDynamic(false);
+		object.meshID = source_entity;
+
+		wi::backlog::post("Static entity instantiated", wi::backlog::LogLevel::Warning);
+
+		return entity;
+	}
+
+	Entity InstantiateEntity(Entity const& source_entity, Movable_Entity const& movable_entity)
 	{
 		Scene& scene = wi::scene::GetScene();
 
@@ -161,6 +217,8 @@ private:
 		object.SetCastShadow(true);
 		object.SetDynamic(true);
 		object.meshID = source_entity;
+
+		wi::backlog::post("Movable entity instantiated", wi::backlog::LogLevel::Warning);
 
 		return entity;
 	}
@@ -221,9 +279,11 @@ void wicked_set_window(void* handle)
 	application.SetWindow((HWND)handle);
 }
 
-void wicked_run(Wicked_Camera camera, Movable_Entity* movable_entities, uint32_t movable_entity_count)
+void wicked_run(Wicked_Camera camera, Movable_Entity* movable_entities, uint32_t movable_entity_count, Static_Entity* static_entities, uint32_t static_entity_count)
 {
 	g_wicked_camera = camera;
+	g_static_entities = static_entities;
+	g_static_entity_count = static_entity_count;
 	g_movable_entities = movable_entities;
 	g_movable_entity_count = movable_entity_count;
 
@@ -292,7 +352,16 @@ void wicked_load_prefab_from_memory(uint64_t prefab_hash, const uint8_t* data, s
 	}
 	else
 	{
-		wi::backlog::post("\tPrefab DOES NOT have an object component",  wi::backlog::LogLevel::Error);
+		wi::backlog::post("\tPrefab DOES NOT have an object component",  wi::backlog::LogLevel::Warning);
+	}
+
+	NameComponent* name = scene.names.GetComponent(prefab);
+	if (name)
+	{
+		char buf[256];
+		memset(buf, 0, 256);
+		sprintf_s(buf, 256, "%llu", prefab_hash);
+		wi::backlog::post("\tPrefab '" + name->name + ":" + std::string(buf) + "' loaded succesfully", wi::backlog::LogLevel::Warning);
 	}
 
 	g_prefab_map.emplace(prefab_hash, prefab);
