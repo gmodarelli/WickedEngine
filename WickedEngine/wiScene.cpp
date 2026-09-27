@@ -8863,6 +8863,19 @@ namespace wi::scene
 		return rootEntity;
 	}
 
+	wi::ecs::Entity LoadModel(const uint8_t* data, size_t size, const XMMATRIX& transformMatrix, bool attached)
+	{
+		Entity rootEntity = INVALID_ENTITY;
+		if (attached)
+		{
+			rootEntity = CreateEntity();
+		}
+		Scene scene;
+		LoadModel2(scene, data, size, transformMatrix, rootEntity);
+		GetScene().Merge(scene);
+		return rootEntity;
+	}
+
 	void LoadModel2(const std::string& fileName, const XMMATRIX& transformMatrix, Entity rootEntity)
 	{
 		Scene scene;
@@ -8873,6 +8886,53 @@ namespace wi::scene
 	void LoadModel2(Scene& scene, const std::string& fileName, const XMMATRIX& transformMatrix, Entity rootEntity)
 	{
 		wi::Archive archive(fileName, true);
+		if (!archive.IsOpen())
+			return;
+
+		// Serialize it from file:
+		scene.Serialize(archive);
+
+		// First, create new root:
+		bool attached = true;
+		if (rootEntity == INVALID_ENTITY)
+		{
+			rootEntity = CreateEntity();
+			attached = false;
+		}
+		scene.transforms.Create(rootEntity);
+		scene.layers.Create(rootEntity).layerMask = ~0;
+
+		{
+			// Apply the optional transformation matrix to the new scene:
+
+			// Parent all unparented transforms to new root entity
+			for (size_t i = 0; i < scene.transforms.GetCount(); ++i)
+			{
+				Entity entity = scene.transforms.GetEntity(i);
+				if (entity != rootEntity && !scene.hierarchy.Contains(entity))
+				{
+					scene.Component_Attach(entity, rootEntity);
+				}
+			}
+
+			// The root component is transformed, scene is updated:
+			TransformComponent* root_transform = scene.transforms.GetComponent(rootEntity);
+			root_transform->MatrixTransform(transformMatrix);
+
+			scene.Update(0);
+		}
+
+		if (!attached)
+		{
+			// In this case, we don't care about the root anymore, so delete it. This will simplify overall hierarchy
+			scene.Component_DetachChildren(rootEntity);
+			scene.Entity_Remove(rootEntity);
+		}
+	}
+
+	void LoadModel2(Scene& scene, const uint8_t* data, size_t size, const XMMATRIX& transformMatrix, wi::ecs::Entity rootEntity)
+	{
+		wi::Archive archive(data, size);
 		if (!archive.IsOpen())
 			return;
 

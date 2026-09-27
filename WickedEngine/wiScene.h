@@ -671,6 +671,15 @@ namespace wi::scene
 	wi::ecs::Entity LoadModel(Scene& scene, const std::string& fileName, const XMMATRIX& transformMatrix = XMMatrixIdentity(), bool attached = false);
 
 	// Helper function to open a wiscene file and add the contents to the global scene
+	//	data    		:	wiscene data
+	//	size    		:	wiscene data size
+	//	transformMatrix	:	everything will be transformed by this matrix (optional)
+	//	attached		:	if true, everything will be attached to a base entity
+	//
+	//	returns INVALID_ENTITY if attached argument was false, else it returns the base entity handle
+	wi::ecs::Entity LoadModel(const uint8_t* data, size_t size, const XMMATRIX& transformMatrix = XMMatrixIdentity(), bool attached = false);
+
+	// Helper function to open a wiscene file and add the contents to the global scene
 	//	fileName		:	file path
 	//	transformMatrix	:	everything will be transformed by this matrix (optional)
 	//	rootEntity		:	specify entity to attach whole scene to (optional)
@@ -682,6 +691,14 @@ namespace wi::scene
 	//	transformMatrix	:	everything will be transformed by this matrix (optional)
 	//	rootEntity		:	specify entity to attach whole scene to (optional)
 	void LoadModel2(Scene& scene, const std::string& fileName, const XMMATRIX& transformMatrix = XMMatrixIdentity(), wi::ecs::Entity rootEntity = wi::ecs::INVALID_ENTITY);
+
+	// Helper function to open a wiscene file and add the contents to the specified scene. This is thread safe as it doesn't modify global scene
+	//	scene			:	the scene that will contain the model
+	//	data     		:	the wiscene data
+	//	size     		:	the wiscene data size
+	//	transformMatrix	:	everything will be transformed by this matrix (optional)
+	//	rootEntity		:	specify entity to attach whole scene to (optional)
+	void LoadModel2(Scene& scene, const uint8_t* data, size_t size, const XMMATRIX& transformMatrix = XMMatrixIdentity(), wi::ecs::Entity rootEntity = wi::ecs::INVALID_ENTITY);
 
 	// Deprecated, use Scene::Intersects() function instead
 	using PickResult = Scene::RayIntersectionResult;

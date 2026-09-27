@@ -16,6 +16,7 @@ struct Movable_Entity
 	float scale[3];
 	float _padding[2];
 	uint64_t game_entity;
+	uint64_t prefab_hash;
 };
 
 void wicked_set_shader_path(const char* path);
@@ -24,3 +25,4 @@ void wicked_set_window(void* handle);
 void wicked_run(Wicked_Camera camera, Movable_Entity* movable_entities, uint32_t movable_entity_count);
 void wicked_shutdown();
 void wicked_load_prefab(const char* prefab_path);
+void wicked_load_prefab_from_memory(uint64_t prefab_hash, const uint8_t* data, size_t size);

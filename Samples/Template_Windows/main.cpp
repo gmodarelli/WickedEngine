@@ -5,10 +5,6 @@ using namespace wi::ecs;
 using namespace wi::scene;
 using namespace wi::graphics;
 
-std::hash<std::string> string_hasher;
-
-const char* g_tripod_prefab_path = "content\\prefabs\\pb_fire_tripod.wiscene";
-
 Wicked_Camera g_wicked_camera;
 Movable_Entity* g_movable_entities;
 uint32_t g_movable_entity_count;
@@ -40,11 +36,6 @@ public:
 
 		Scene& scene = wi::scene::GetScene();
 		wi::renderer::ClearWorld(scene);
-
-		// Load prefabs test
-		{
-			wicked_load_prefab(g_tripod_prefab_path);
-		}
 
 		// Create sun light
 		{
@@ -100,8 +91,6 @@ public:
 		camera.fov = g_wicked_camera.fov_vertical;
 
 		Scene& scene = wi::scene::GetScene();
-		size_t prefab_key = string_hasher(g_tripod_prefab_path);
-		auto prefab_entry = g_prefab_map.find(prefab_key);
 
 		if (g_movable_entities != nullptr)
 		{
@@ -127,6 +116,7 @@ public:
 				}
 				else
 				{
+					auto prefab_entry = g_prefab_map.find(movable_entity.prefab_hash);
 					if (prefab_entry != g_prefab_map.end())
 					{
 						Entity entity = InstantiateMovableEntity(prefab_entry->second, movable_entity);
@@ -238,9 +228,9 @@ void wicked_shutdown()
 	wi::jobsystem::ShutDown(); // waits for jobs to finish before shutdown
 }
 
-void wicked_load_prefab(const char* prefab_path)
+void wicked_load_prefab(const char* prefab_path, uint64_t prefab_hash)
 {
-	// Entity prefab = wi::scene::LoadModel(prefab_path);
+	// TODO: Make it so this function can return the actual entity that was created
 	wi::scene::LoadModel(prefab_path);
 	wi::backlog::post("Prefab loaded succesfully: " + std::string(prefab_path),  wi::backlog::LogLevel::Warning);
 
@@ -258,26 +248,27 @@ void wicked_load_prefab(const char* prefab_path)
 		wi::backlog::post("\tPrefab DOES NOT have an object component",  wi::backlog::LogLevel::Error);
 	}
 
-	// MeshComponent* mesh = scene.meshes.GetComponent(prefab);
-	// if (mesh)
-	// {
-	// 	wi::backlog::post("\tPrefab has a mesh component",  wi::backlog::LogLevel::Warning);
-	// }
-	// else
-	// {
-	// 	wi::backlog::post("\tPrefab DOES NOT have a mesh component",  wi::backlog::LogLevel::Error);
-	// }
+	g_prefab_map.emplace(prefab_hash, prefab);
+}
 
-	// MaterialComponent* material = scene.materials.GetComponent(prefab);
-	// if (material)
-	// {
-	// 	wi::backlog::post("\tPrefab has a material component",  wi::backlog::LogLevel::Warning);
-	// }
-	// else
-	// {
-	// 	wi::backlog::post("\tPrefab DOES NOT have a material component",  wi::backlog::LogLevel::Error);
-	// }
+void wicked_load_prefab_from_memory(uint64_t prefab_hash, const uint8_t* data, size_t size)
+{
+	// TODO: Make it so this function can return the actual entity that was created
+	wi::scene::LoadModel(data, size);
 
-	size_t prefab_key = string_hasher(prefab_path);
-	g_prefab_map.emplace(prefab_key, prefab);
+	Scene& scene = wi::scene::GetScene();
+	// HACK: Retrieve the loaded entity ID from the last object component
+	Entity prefab = scene.objects.GetEntity(scene.objects.GetCount() - 1);
+
+	ObjectComponent* object = scene.objects.GetComponent(prefab);
+	if (object)
+	{
+		object->SetRenderable(false);
+	}
+	else
+	{
+		wi::backlog::post("\tPrefab DOES NOT have an object component",  wi::backlog::LogLevel::Error);
+	}
+
+	g_prefab_map.emplace(prefab_hash, prefab);
 }
