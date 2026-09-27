@@ -228,6 +228,11 @@ void wicked_shutdown()
 	wi::jobsystem::ShutDown(); // waits for jobs to finish before shutdown
 }
 
+void wicked_enable_profiler(bool value)
+{
+	wi::profiler::SetEnabled(value);
+}
+
 void wicked_load_prefab(const char* prefab_path, uint64_t prefab_hash)
 {
 	// TODO: Make it so this function can return the actual entity that was created
