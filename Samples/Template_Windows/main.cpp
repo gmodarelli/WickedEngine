@@ -179,21 +179,29 @@ public:
 	{
 		Application::Initialize();
 
-		infoDisplay.active = true;
+		infoDisplay = {};
 		infoDisplay.watermark = false;
-		infoDisplay.resolution = false;
 		infoDisplay.fpsinfo = true;
+		infoDisplay.device_name = true;
+		infoDisplay.resolution = true;
+		infoDisplay.vram_usage = true;
 
 		renderer.init(canvas);
 		renderer.Load();
 
 		ActivatePath(&renderer);
+
+		wi::eventhandler::SetVSync(vsyncEnabled);
+		wi::profiler::SetEnabled(profilerEnabled);
 	}
 
 	void Compose(wi::graphics::CommandList cmd) override
 	{
 		Application::Compose(cmd);
 	}
+
+	bool vsyncEnabled = true;
+	bool profilerEnabled = false;
 };
 
 Tides_Application application;
@@ -228,14 +236,21 @@ void wicked_shutdown()
 	wi::jobsystem::ShutDown(); // waits for jobs to finish before shutdown
 }
 
-void wicked_enable_profiler(bool value)
+void wicked_toggle_profiler()
 {
-	wi::profiler::SetEnabled(value);
+	application.profilerEnabled = !application.profilerEnabled;
+	wi::profiler::SetEnabled(application.profilerEnabled);
 }
 
-void wicked_enable_vsync(bool value)
+void wicked_toggle_vsync()
 {
-	wi::eventhandler::SetVSync(value);
+	application.vsyncEnabled = !application.vsyncEnabled;
+	wi::eventhandler::SetVSync(application.vsyncEnabled);
+}
+
+void wicked_toggle_info_displayer()
+{
+	application.infoDisplay.active = !application.infoDisplay.active;
 }
 
 void wicked_load_prefab(const char* prefab_path, uint64_t prefab_hash)
