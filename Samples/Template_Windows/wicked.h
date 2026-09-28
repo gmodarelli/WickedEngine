@@ -37,5 +37,4 @@ void wicked_shutdown();
 void wicked_toggle_profiler();
 void wicked_toggle_vsync();
 void wicked_toggle_info_displayer();
-void wicked_load_prefab(const char* prefab_path);
 void wicked_load_prefab_from_memory(uint64_t prefab_hash, const uint8_t* data, size_t size);

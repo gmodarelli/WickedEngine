@@ -12,6 +12,17 @@ Movable_Entity* g_movable_entities;
 uint32_t g_movable_entity_count;
 wi::unordered_map<size_t, Entity> g_prefab_map;
 
+struct LoadPrefabRequest
+{
+	uint64_t prefab_hash;
+	const uint8_t* data;
+	size_t size;
+};
+
+constexpr uint32_t g_load_prefab_per_frame_max = 5;
+std::deque<LoadPrefabRequest> g_load_prefab_requests;
+std::mutex g_load_prefab_request_mutex;
+
 class Tides_Renderer : public wi::RenderPath3D
 {
 	Entity sunlight = INVALID_ENTITY;
@@ -152,6 +163,8 @@ public:
 			}
 		}
 
+		process_prefab_load_requests();
+
 		RenderPath3D::Update(dt);
 	}
 
@@ -161,6 +174,47 @@ public:
 	}
 
 private:
+	void process_prefab_load_requests()
+	{
+		std::scoped_lock(g_load_prefab_request_mutex);
+		Scene& scene = wi::scene::GetScene();
+		uint32_t loaded_prefab_count = 0;
+
+		while (!g_load_prefab_requests.empty() && loaded_prefab_count < g_load_prefab_per_frame_max)
+		{
+			LoadPrefabRequest request = g_load_prefab_requests[0];
+			g_load_prefab_requests.pop_front();
+			loaded_prefab_count++;
+
+			// TODO: Make it so this function can return the actual entity that was created
+			wi::scene::LoadModel(request.data, request.size);
+
+			// HACK: Retrieve the loaded entity ID from the last object component
+			Entity prefab = scene.objects.GetEntity(scene.objects.GetCount() - 1);
+
+			ObjectComponent* object = scene.objects.GetComponent(prefab);
+			if (object)
+			{
+				object->SetRenderable(false);
+			}
+			else
+			{
+				wi::backlog::post("\tPrefab DOES NOT have an object component",  wi::backlog::LogLevel::Warning);
+			}
+
+			NameComponent* name = scene.names.GetComponent(prefab);
+			if (name)
+			{
+				char buf[256];
+				memset(buf, 0, 256);
+				sprintf_s(buf, 256, "%llu", request.prefab_hash);
+				wi::backlog::post("\tPrefab '" + name->name + ":" + std::string(buf) + "' loaded succesfully", wi::backlog::LogLevel::Warning);
+			}
+
+			g_prefab_map.emplace(request.prefab_hash, prefab);
+		}
+	}
+
 	Entity InstantiateEntity(Entity const& source_entity, Static_Entity const& static_entity)
 	{
 		Scene& scene = wi::scene::GetScene();
@@ -186,8 +240,6 @@ private:
 		object.SetCastShadow(true);
 		object.SetDynamic(false);
 		object.meshID = source_entity;
-
-		wi::backlog::post("Static entity instantiated", wi::backlog::LogLevel::Warning);
 
 		return entity;
 	}
@@ -217,8 +269,6 @@ private:
 		object.SetCastShadow(true);
 		object.SetDynamic(true);
 		object.meshID = source_entity;
-
-		wi::backlog::post("Movable entity instantiated", wi::backlog::LogLevel::Warning);
 
 		return entity;
 	}
@@ -313,56 +363,14 @@ void wicked_toggle_info_displayer()
 	application.infoDisplay.active = !application.infoDisplay.active;
 }
 
-void wicked_load_prefab(const char* prefab_path, uint64_t prefab_hash)
-{
-	// TODO: Make it so this function can return the actual entity that was created
-	wi::scene::LoadModel(prefab_path);
-	wi::backlog::post("Prefab loaded succesfully: " + std::string(prefab_path),  wi::backlog::LogLevel::Warning);
-
-	Scene& scene = wi::scene::GetScene();
-	// HACK: Retrieve the loaded entity ID from the last object component
-	Entity prefab = scene.objects.GetEntity(scene.objects.GetCount() - 1);
-
-	ObjectComponent* object = scene.objects.GetComponent(prefab);
-	if (object)
-	{
-		object->SetRenderable(false);
-	}
-	else
-	{
-		wi::backlog::post("\tPrefab DOES NOT have an object component",  wi::backlog::LogLevel::Error);
-	}
-
-	g_prefab_map.emplace(prefab_hash, prefab);
-}
-
 void wicked_load_prefab_from_memory(uint64_t prefab_hash, const uint8_t* data, size_t size)
 {
-	// TODO: Make it so this function can return the actual entity that was created
-	wi::scene::LoadModel(data, size);
-
-	Scene& scene = wi::scene::GetScene();
-	// HACK: Retrieve the loaded entity ID from the last object component
-	Entity prefab = scene.objects.GetEntity(scene.objects.GetCount() - 1);
-
-	ObjectComponent* object = scene.objects.GetComponent(prefab);
-	if (object)
-	{
-		object->SetRenderable(false);
-	}
-	else
-	{
-		wi::backlog::post("\tPrefab DOES NOT have an object component",  wi::backlog::LogLevel::Warning);
-	}
-
-	NameComponent* name = scene.names.GetComponent(prefab);
-	if (name)
-	{
-		char buf[256];
-		memset(buf, 0, 256);
-		sprintf_s(buf, 256, "%llu", prefab_hash);
-		wi::backlog::post("\tPrefab '" + name->name + ":" + std::string(buf) + "' loaded succesfully", wi::backlog::LogLevel::Warning);
-	}
-
-	g_prefab_map.emplace(prefab_hash, prefab);
+	std::scoped_lock(g_load_prefab_request_mutex);
+	LoadPrefabRequest request = {};
+	request.prefab_hash = prefab_hash;
+	request.size = size;
+	// NOTE: The file streaming is going to hold on to this data for a while
+	// so it should be safe to just pass a pointer around
+	request.data = data;
+	g_load_prefab_requests.emplace_back(request);
 }
